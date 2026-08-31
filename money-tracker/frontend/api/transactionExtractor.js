@@ -43,14 +43,33 @@ function parseAmount(str) {
   return isNaN(num) ? 0 : Math.round(num * 100) / 100;
 }
 
-function parsePhonePePass(flat, isMobilePass = false) {
+// Pass 1: Primary Desktop PhonePe Parser (Untouched)
+function parseDesktopPhonePe(rawText) {
+  let cleaned = rawText;
+  cleaned = cleaned.replace(/Page\s+\d+\s+of\s+\d+/gi, '');
+  cleaned = cleaned.replace(/Date\s+Transaction\s+Details\s+Type\s+Amount/gi, '');
+  cleaned = cleaned.replace(/This\s+is\s+a\s+system\s+generated\s+statement\./gi, '');
+  cleaned = cleaned.replace(/For\s+any\s+queries,?\s+contact\s+us\s+at\s+https?:\/\/[^\s\n]*/gi, '');
+  cleaned = cleaned.replace(/https?:\/\/support\.phonepe\.com[^\s\n]*/gi, '');
+  cleaned = cleaned.replace(/https?:\/\/www\.phonepe\.com[^\s\n]*/gi, '');
+  cleaned = cleaned.replace(/This\s+is\s+an\s+automatically\s+generated\s+statement[\s\S]*?Privacy\s+Policy\./gi, '');
+  cleaned = cleaned.replace(/Customer\(s\)\s+are\s+requested[\s\S]*?Privacy\s+Policy\./gi, '');
+  cleaned = cleaned.replace(/Disclaimer\s*:[\s\S]*?details are corrected\./gi, '');
+  cleaned = cleaned.replace(/Do\s+not\s+fall\s+prey[\s\S]*?details are corrected\./gi, '');
+  cleaned = cleaned.replace(/Datetransaction\s*Detailstypeamount/gi, '');
+  cleaned = cleaned.replace(/DateTransaction\s*DetailsTypeAmount/gi, '');
+  cleaned = cleaned.replace(/Athttps?:\/\/[^\s\n]*/gi, '');
+  cleaned = cleaned.replace(/Athttp[^\s\n]*/gi, '');
+  cleaned = cleaned.replace(/Transaction\s+Statement\s+for\s+\d+/gi, '');
+  cleaned = cleaned.replace(/\d{1,2}\s+\w+,\s+\d{4}\s*-\s*\d{1,2}\s+\w+,\s+\d{4}/g, '');
+
+  const flat = cleaned.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\t/g, ' ').replace(/\n/g, ' ').replace(/\s{2,}/g, ' ');
+
   const transactions = [];
-  const regex = isMobilePass
-    ? /(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2}),?\s+(\d{4})\s+(\d{1,2}[: ]+\d{2}\s*(?:am|pm))\s*(DEBIT|CREDIT)\s*(?:Γé╣|₹|INR|Rs\.?)?\s*([\d,]+(?:\.\d{1,2})?)\s*(Paid to|Received from|Refund from)?\s*([^Γé╣₹]+?)(?=\s*(?:DEBIT|CREDIT)\s*(?:Γé╣|₹|INR|Rs\.?)|\s*Transaction ID|\s*UTR No|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}|\s*$)/gi
-    : /(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2}),\s+(\d{4})\s+(\d{1,2}:\d{2}\s+(?:am|pm))\s+(DEBIT|CREDIT)\s*(?:Γé╣|₹|INR|Rs\.?)\s*([\d,]+(?:\.\d{1,2})?)\s*(Paid to|Received from|Refund from)\s+([^Γé╣₹]+?)(?=\s+(?:DEBIT|CREDIT)\s*(?:Γé╣|₹|INR|Rs\.?)|\s+Transaction ID|\s+UTR No|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},\s+\d{4}|$)/gi;
+  const MASTER_REGEX = /(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2}),\s+(\d{4})\s+(\d{1,2}:\d{2}\s+(?:am|pm))\s+(DEBIT|CREDIT)\s*(?:Γé╣|₹|INR|Rs\.?)\s*([\d,]+(?:\.\d{1,2})?)\s*(Paid to|Received from|Refund from)\s+([^Γé╣₹]+?)(?=\s+(?:DEBIT|CREDIT)\s*(?:Γé╣|₹|INR|Rs\.?)|\s+Transaction ID|\s+UTR No|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},\s+\d{4}|$)/gi;
 
   let match;
-  while ((match = regex.exec(flat)) !== null) {
+  while ((match = MASTER_REGEX.exec(flat)) !== null) {
     const monthStr = match[1].toLowerCase();
     const month = MONTHS[monthStr];
     let dateObj = new Date(parseInt(match[3]), month, parseInt(match[2]));
@@ -67,12 +86,12 @@ function parsePhonePePass(flat, isMobilePass = false) {
 
     if (amount <= 0 || merchantClean.length < 2) continue;
 
-    const afterMatch = flat.substring(regex.lastIndex);
-    const nextDatePos = afterMatch.search(/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}/i);
+    const afterMatch = flat.substring(MASTER_REGEX.lastIndex);
+    const nextDatePos = afterMatch.search(/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},\s+\d{4}/i);
     const segment = nextDatePos > 0 ? afterMatch.substring(0, nextDatePos) : afterMatch.substring(0, 300);
 
-    const utrMatch = segment.match(/UTR No\.?\s*:?\s*(\d+)/i);
-    const txnIdMatch = segment.match(/Transaction ID\s*:?\s*([A-Z0-9]+)/i);
+    const utrMatch = segment.match(/UTR No\.?\s*(\d+)/i);
+    const txnIdMatch = segment.match(/Transaction ID\s+([A-Z0-9]+)/i);
 
     transactions.push({
       id: uuidv4(),
@@ -94,35 +113,133 @@ function parsePhonePePass(flat, isMobilePass = false) {
   return transactions;
 }
 
-function extractTransactions(rawText) {
-  let cleaned = rawText;
-  cleaned = cleaned.replace(/Page\s+\d+\s+of\s+\d+/gi, '');
-  cleaned = cleaned.replace(/Date\s+Transaction\s+Details\s+Type\s+Amount/gi, '');
-  cleaned = cleaned.replace(/This\s+is\s+a\s+system\s+generated\s+statement\./gi, '');
-  cleaned = cleaned.replace(/For\s+any\s+queries,?\s+contact\s+us\s+at\s+https?:\/\/[^\s\n]*/gi, '');
-  cleaned = cleaned.replace(/https?:\/\/support\.phonepe\.com[^\s\n]*/gi, '');
-  cleaned = cleaned.replace(/https?:\/\/www\.phonepe\.com[^\s\n]*/gi, '');
-  cleaned = cleaned.replace(/This\s+is\s+an\s+automatically\s+generated\s+statement[\s\S]*?Privacy\s+Policy\./gi, '');
-  cleaned = cleaned.replace(/Customer\(s\)\s+are\s+requested[\s\S]*?Privacy\s+Policy\./gi, '');
-  cleaned = cleaned.replace(/Disclaimer\s*:[\s\S]*?details are corrected\./gi, '');
-  cleaned = cleaned.replace(/Do\s+not\s+fall\s+prey[\s\S]*?details are corrected\./gi, '');
-  cleaned = cleaned.replace(/Datetransaction\s*Detailstypeamount/gi, '');
-  cleaned = cleaned.replace(/DateTransaction\s*DetailsTypeAmount/gi, '');
-  cleaned = cleaned.replace(/Athttps?:\/\/[^\s\n]*/gi, '');
-  cleaned = cleaned.replace(/Athttp[^\s\n]*/gi, '');
-  cleaned = cleaned.replace(/Transaction\s+Statement\s+for\s+\d+/gi, '');
-  cleaned = cleaned.replace(/\d{1,2}\s+\w+,\s+\d{4}\s*-\s*\d{1,2}\s+\w+,\s+\d{4}/g, '');
+// Pass 2: Mobile Fallback PhonePe Parser
+function parseMobilePhonePe(rawText) {
+  let cleaned = rawText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const lines = cleaned.split('\n').map(l => l.trim()).filter(Boolean);
 
-  const flat = cleaned.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\t/g, ' ').replace(/\n/g, ' ').replace(/\s{2,}/g, ' ');
+  const ignoredLines = [
+    /^DateTransaction\s*DetailsTypeAmount$/i,
+    /^Datetransaction\s*Detailstypeamount$/i,
+    /^Date\s+Transaction\s+Details\s+Type\s+Amount$/i,
+    /^Transaction\s+Statement\s+for\s+\d+$/i,
+    /^\d{1,2}\s+\w+,\s+\d{4}\s*-\s*\d{1,2}\s+\w+,\s+\d{4}$/i,
+    /^This\s+is\s+a\s+system\s+generated\s+statement\./i,
+    /^Page\s+\d+\s+of\s+\d+$/i,
+    /^For\s+any\s+queries,?\s+contact/i,
+    /^https?:\/\//i,
+    /^Customer\(s\)\s+are\s+requested/i,
+    /^Disclaimer\s*:/i,
+    /^Do\s+not\s+fall\s+prey/i
+  ];
 
-  // Pass 1: Standard Desktop Pattern
-  let transactions = parsePhonePePass(flat, false);
+  const filteredLines = lines.filter(line => {
+    return !ignoredLines.some(re => re.test(line));
+  });
 
-  // Pass 2: Fallback Mobile / Merged Pattern
-  if (transactions.length === 0) {
-    console.log('[PhonePe Parser] Pass 1 returned 0 transactions. Trying Pass 2 (mobile/fallback pattern)...');
-    transactions = parsePhonePePass(flat, true);
+  const blocks = [];
+  let currentBlock = null;
+
+  const dateRegex = /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2}),?\s+(\d{4})$/i;
+
+  for (let i = 0; i < filteredLines.length; i++) {
+    const line = filteredLines[i];
+    if (dateRegex.test(line)) {
+      if (currentBlock) {
+        blocks.push(currentBlock);
+      }
+      currentBlock = [line];
+    } else if (currentBlock) {
+      currentBlock.push(line);
+    }
   }
+  if (currentBlock) {
+    blocks.push(currentBlock);
+  }
+
+  const transactions = [];
+
+  for (const block of blocks) {
+    try {
+      const blockText = block.join(' ');
+      const dateLine = block.find(l => dateRegex.test(l));
+      if (!dateLine) continue;
+
+      const dateMatch = dateLine.match(dateRegex);
+      const monthStr = dateMatch[1].toLowerCase();
+      const month = MONTHS[monthStr];
+      const day = parseInt(dateMatch[2]);
+      const year = parseInt(dateMatch[3]);
+      let dateObj = new Date(year, month, day);
+      dateObj = new Date(dateObj.getTime() - (dateObj.getTimezoneOffset() * 60000));
+      const formattedDate = dateObj.toISOString().split('T')[0];
+
+      const timeLine = block.find(l => /(\d{1,2})[\s:]+(\d{2})\s*(am|pm)/i.test(l));
+      let timeStr = '';
+      if (timeLine) {
+        const timeMatch = timeLine.match(/(\d{1,2})[\s:]+(\d{2})\s*(am|pm)/i);
+        if (timeMatch) {
+          const hh = timeMatch[1].padStart(2, '0');
+          const mm = timeMatch[2];
+          const ampm = timeMatch[3].toLowerCase();
+          timeStr = `${hh}:${mm} ${ampm}`;
+        }
+      }
+
+      const mainLine = block.find(l => /(DEBIT|CREDIT)/i.test(l));
+      if (!mainLine) continue;
+
+      const mainMatch = mainLine.match(/(DEBIT|CREDIT)\s*(?:Γé╣|₹|INR|Rs\.?)?\s*([\d,]+(?:\.\d{1,2})?)\s*(Paid to|Received from|Refund from)?\s*(.+)/i);
+      if (!mainMatch) continue;
+
+      const type = mainMatch[1].toLowerCase();
+      const amount = parseAmount(mainMatch[2]);
+      let rawMerchant = mainMatch[4].trim();
+
+      let cleanedRaw = stripEmojis(rawMerchant);
+      let merchantClean = cleanedRaw.replace(/\s*(Paid by|Credited to)\s+[A-Z0-9X]+/i, '').replace(/\s+/g, ' ').trim();
+      merchantClean = cleanMerchant(merchantClean);
+
+      if (amount <= 0 || merchantClean.length < 2) continue;
+
+      const utrMatch = blockText.match(/UTR No\.?\s*:?\s*(\d+)/i);
+      const txnIdMatch = blockText.match(/Transaction ID\s*:?\s*([A-Z0-9]+)/i);
+
+      transactions.push({
+        id: uuidv4(),
+        date: formattedDate,
+        time: timeStr,
+        merchant: merchantClean,
+        rawMerchant: rawMerchant,
+        normalizedMerchant: normalizeMerchant(merchantClean),
+        amount: amount,
+        type: type,
+        category: 'Uncategorized',
+        upiRef: utrMatch ? utrMatch[1] : null,
+        transactionId: txnIdMatch ? txnIdMatch[1] : null,
+        status: 'Success',
+        uploadedAt: new Date().toISOString()
+      });
+    } catch (err) {
+      console.warn('Skipping block error:', err);
+    }
+  }
+
+  return transactions;
+}
+
+function extractTransactions(rawText) {
+  // Pass 1: Primary Desktop Parser (Untouched)
+  let transactions = parseDesktopPhonePe(rawText);
+  if (transactions.length > 0) {
+    console.log(`[PhonePe Parser] Pass 1 (Desktop) extracted ${transactions.length} transactions.`);
+    return transactions;
+  }
+
+  // Pass 2: Mobile Fallback Parser
+  console.log('[PhonePe Parser] Pass 1 returned 0 transactions. Running Pass 2 (Mobile Fallback)...');
+  transactions = parseMobilePhonePe(rawText);
+  console.log(`[PhonePe Parser] Pass 2 (Mobile) extracted ${transactions.length} transactions.`);
 
   return transactions;
 }
