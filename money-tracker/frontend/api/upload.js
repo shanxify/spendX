@@ -64,25 +64,28 @@ app.post('*', upload.single('file'), async (req, res) => {
     let extractedTransactions = [];
     if (provider === 'phonepe') {
       extractedTransactions = extractTransactions(rawText);
-      if (extractedTransactions.length === 0)
+      if (extractedTransactions.length === 0) {
+        console.log('[DEBUG TEXT FROM PDF]:', rawText.substring(0, 1500));
         return res.status(422).json({ 
-          error: 'No transactions found. Make sure this is a PhonePe statement PDF.',
-          debugText: rawText.substring(0, 1500)
+          error: 'No transactions found. Make sure this is a PhonePe statement PDF.'
         });
+      }
     } else if (provider === 'gpay') {
       extractedTransactions = parseGooglePay(rawText);
-      if (extractedTransactions.length === 0)
+      if (extractedTransactions.length === 0) {
+        console.log('[DEBUG TEXT FROM PDF]:', rawText.substring(0, 1500));
         return res.status(422).json({ 
-          error: 'No transactions found. Make sure this is a Google Pay statement PDF.',
-          debugText: rawText.substring(0, 1500)
+          error: 'No transactions found. Make sure this is a Google Pay statement PDF.'
         });
+      }
     } else if (provider === 'paytm') {
       extractedTransactions = parsePaytm(rawText);
-      if (extractedTransactions.length === 0)
+      if (extractedTransactions.length === 0) {
+        console.log('[DEBUG TEXT FROM PDF]:', rawText.substring(0, 1500));
         return res.status(422).json({ 
-          error: 'No transactions found. Make sure this is a Paytm statement PDF.',
-          debugText: rawText.substring(0, 1500)
+          error: 'No transactions found. Make sure this is a Paytm statement PDF.'
         });
+      }
     } else if (provider === 'others') {
       extractedTransactions = parseGeneric(rawText);
       if (extractedTransactions.length === 0)

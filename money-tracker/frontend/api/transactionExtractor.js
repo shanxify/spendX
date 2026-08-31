@@ -43,6 +43,57 @@ function parseAmount(str) {
   return isNaN(num) ? 0 : Math.round(num * 100) / 100;
 }
 
+function parsePhonePePass(flat, isMobilePass = false) {
+  const transactions = [];
+  const regex = isMobilePass
+    ? /(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2}),?\s+(\d{4})\s+(\d{1,2}[: ]+\d{2}\s*(?:am|pm))\s*(DEBIT|CREDIT)\s*(?:Γé╣|₹|INR|Rs\.?)?\s*([\d,]+(?:\.\d{1,2})?)\s*(Paid to|Received from|Refund from)?\s*([^Γé╣₹]+?)(?=\s*(?:DEBIT|CREDIT)\s*(?:Γé╣|₹|INR|Rs\.?)|\s*Transaction ID|\s*UTR No|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}|\s*$)/gi
+    : /(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2}),\s+(\d{4})\s+(\d{1,2}:\d{2}\s+(?:am|pm))\s+(DEBIT|CREDIT)\s*(?:Γé╣|₹|INR|Rs\.?)\s*([\d,]+(?:\.\d{1,2})?)\s*(Paid to|Received from|Refund from)\s+([^Γé╣₹]+?)(?=\s+(?:DEBIT|CREDIT)\s*(?:Γé╣|₹|INR|Rs\.?)|\s+Transaction ID|\s+UTR No|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},\s+\d{4}|$)/gi;
+
+  let match;
+  while ((match = regex.exec(flat)) !== null) {
+    const monthStr = match[1].toLowerCase();
+    const month = MONTHS[monthStr];
+    let dateObj = new Date(parseInt(match[3]), month, parseInt(match[2]));
+    dateObj = new Date(dateObj.getTime() - (dateObj.getTimezoneOffset() * 60000));
+    
+    const timeStr = match[4];
+    const type = match[5].toLowerCase();
+    const amount = parseAmount(match[6]);
+    let rawMerchantName = match[8].trim();
+    
+    let cleanedRaw = stripEmojis(rawMerchantName);
+    let merchantClean = cleanedRaw.replace(/\s*(Paid by|Credited to)\s+[A-Z0-9X]+/i, '').replace(/\s+/g, ' ').trim();
+    merchantClean = cleanMerchant(merchantClean);
+
+    if (amount <= 0 || merchantClean.length < 2) continue;
+
+    const afterMatch = flat.substring(regex.lastIndex);
+    const nextDatePos = afterMatch.search(/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}/i);
+    const segment = nextDatePos > 0 ? afterMatch.substring(0, nextDatePos) : afterMatch.substring(0, 300);
+
+    const utrMatch = segment.match(/UTR No\.?\s*:?\s*(\d+)/i);
+    const txnIdMatch = segment.match(/Transaction ID\s*:?\s*([A-Z0-9]+)/i);
+
+    transactions.push({
+      id: uuidv4(),
+      date: dateObj.toISOString().split('T')[0],
+      time: timeStr,
+      merchant: merchantClean,
+      rawMerchant: rawMerchantName,
+      normalizedMerchant: normalizeMerchant(merchantClean),
+      amount: amount,
+      type: type,
+      category: 'Uncategorized',
+      upiRef: utrMatch ? utrMatch[1] : null,
+      transactionId: txnIdMatch ? txnIdMatch[1] : null,
+      status: 'Success',
+      uploadedAt: new Date().toISOString()
+    });
+  }
+
+  return transactions;
+}
+
 function extractTransactions(rawText) {
   let cleaned = rawText;
   cleaned = cleaned.replace(/Page\s+\d+\s+of\s+\d+/gi, '');
@@ -64,49 +115,13 @@ function extractTransactions(rawText) {
 
   const flat = cleaned.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\t/g, ' ').replace(/\n/g, ' ').replace(/\s{2,}/g, ' ');
 
-  const transactions = [];
-  const MASTER_REGEX = /(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2}),\s+(\d{4})\s+(\d{1,2}:\d{2}\s+(?:am|pm))\s+(DEBIT|CREDIT)\s*(?:Γé╣|₹|INR|Rs\.?)\s*([\d,]+(?:\.\d{1,2})?)\s*(Paid to|Received from|Refund from)\s+([^Γé╣₹]+?)(?=\s+(?:DEBIT|CREDIT)\s*(?:Γé╣|₹|INR|Rs\.?)|\s+Transaction ID|\s+UTR No|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},\s+\d{4}|$)/gi;
+  // Pass 1: Standard Desktop Pattern
+  let transactions = parsePhonePePass(flat, false);
 
-  let match;
-  while ((match = MASTER_REGEX.exec(flat)) !== null) {
-    const monthStr = match[1].toLowerCase();
-    const month = MONTHS[monthStr];
-    let dateObj = new Date(parseInt(match[3]), month, parseInt(match[2]));
-    dateObj = new Date(dateObj.getTime() - (dateObj.getTimezoneOffset() * 60000));
-    
-    const timeStr = match[4];
-    const type = match[5].toLowerCase();
-    const amount = parseAmount(match[6]);
-    let rawMerchantName = match[8].trim();
-    
-    let cleanedRaw = stripEmojis(rawMerchantName);
-    let merchantClean = cleanedRaw.replace(/\s*(Paid by|Credited to)\s+[A-Z0-9X]+/i, '').replace(/\s+/g, ' ').trim();
-    merchantClean = cleanMerchant(merchantClean);
-
-    if (amount <= 0 || merchantClean.length < 2) continue;
-
-    const afterMatch = flat.substring(MASTER_REGEX.lastIndex);
-    const nextDatePos = afterMatch.search(/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},\s+\d{4}/i);
-    const segment = nextDatePos > 0 ? afterMatch.substring(0, nextDatePos) : afterMatch.substring(0, 300);
-
-    const utrMatch = segment.match(/UTR No\.?\s*(\d+)/i);
-    const txnIdMatch = segment.match(/Transaction ID\s+([A-Z0-9]+)/i);
-
-    transactions.push({
-      id: uuidv4(),
-      date: dateObj.toISOString().split('T')[0],
-      time: timeStr,
-      merchant: merchantClean,
-      rawMerchant: rawMerchantName,
-      normalizedMerchant: normalizeMerchant(merchantClean),
-      amount: amount,
-      type: type,
-      category: 'Uncategorized',
-      upiRef: utrMatch ? utrMatch[1] : null,
-      transactionId: txnIdMatch ? txnIdMatch[1] : null,
-      status: 'Success',
-      uploadedAt: new Date().toISOString()
-    });
+  // Pass 2: Fallback Mobile / Merged Pattern
+  if (transactions.length === 0) {
+    console.log('[PhonePe Parser] Pass 1 returned 0 transactions. Trying Pass 2 (mobile/fallback pattern)...');
+    transactions = parsePhonePePass(flat, true);
   }
 
   return transactions;

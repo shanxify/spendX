@@ -38,12 +38,33 @@ export function AuthProvider({ children }) {
   }, []);
 
   const signInWithGoogle = async () => {
-    await supabase.auth.signInWithOAuth({
+    try {
+      // Pre-check if Supabase URL is reachable before triggering full-page browser redirect
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const url = process.env.REACT_APP_SUPABASE_URL || process.env.SUPABASE_URL || 'https://tdjynchyarsgujxzomfz.supabase.co';
+      
+      await fetch(`${url}/rest/v1/`, { method: 'GET', signal: controller.signal, headers: { 'apikey': process.env.REACT_APP_SUPABASE_ANON_KEY || '' } })
+        .catch((err) => {
+          throw new Error(`Supabase backend domain is unreachable (${url}). The Supabase project may be paused, expired, or deleted.`);
+        });
+      clearTimeout(timeoutId);
+    } catch (checkErr) {
+      if (checkErr.message.includes('unreachable')) {
+        throw checkErr;
+      }
+    }
+
+    const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: window.location.origin
       }
     });
+
+    if (error) {
+      throw error;
+    }
   };
 
   const signOut = async () => {

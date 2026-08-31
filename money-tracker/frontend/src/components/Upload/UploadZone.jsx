@@ -66,12 +66,7 @@ const UploadZone = ({ onUploadSuccess }) => {
       setResult(data);
     } catch (err) {
       const errMsg = err.response?.data?.error || err.message || 'An error occurred during upload.';
-      const debugText = err.response?.data?.debugText;
-      if (debugText) {
-        setError(`${errMsg}\n\n[DEBUG TEXT FROM PDF]:\n${debugText}`);
-      } else {
-        setError(errMsg);
-      }
+      setError(errMsg);
     } finally {
       setIsUploading(false);
     }
