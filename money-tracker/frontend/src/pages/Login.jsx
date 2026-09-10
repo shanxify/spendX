@@ -20,7 +20,7 @@ export default function Login() {
   };
 
   const handleDemoClick = () => {
-    window.location.href = '/demo/dashboard';
+    window.location.href = '/';
   };
 
   return (
