@@ -29,7 +29,53 @@ function AppContent() {
     return <IntroLoader onFinish={() => setIntroLoading(false)} />;
   }
 
-  // Always render main application directly without gating behind login or demo mode
+  const isDemoRoute = window.location.pathname.startsWith('/demo');
+  if (isDemoRoute) {
+    return (
+      <DemoProvider>
+        <Router>
+          <DemoLayout>
+            <Routes>
+              <Route path="/demo" element={<Navigate to="/demo/upload" replace />} />
+              <Route path="/demo/upload"    element={<DemoUpload />} />
+              <Route path="/demo/merchants" element={<DemoMerchants />} />
+              <Route path="/demo/dashboard" element={<DemoDashboard />} />
+            </Routes>
+          </DemoLayout>
+        </Router>
+      </DemoProvider>
+    );
+  }
+
+  // Wait for auth check to complete
+  if (authLoading) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#060010'
+      }}>
+        <div style={{
+          width: '40px',
+          height: '40px',
+          border: '3px solid rgba(124,58,237,0.3)',
+          borderTopColor: '#7c3aed',
+          borderRadius: '50%',
+          animation: 'spin 0.8s linear infinite'
+        }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
+  // Not logged in — show login page only
+  if (!user) {
+    return <Login />;
+  }
+
+  // Logged in — show full app
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -95,8 +141,6 @@ function AppContent() {
                     <Route path="/transactions" element={<Transactions />} />
                     <Route path="/categories" element={<Categories />} />
                     <Route path="/merchants" element={<MerchantMapping />} />
-                    <Route path="/login" element={<Login />} />
-                    <Route path="/demo/*" element={<Navigate to="/" replace />} />
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Routes>
                 </main>
