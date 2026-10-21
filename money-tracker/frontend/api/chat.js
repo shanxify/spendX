@@ -1,15 +1,101 @@
 const { createClient } = require('@supabase/supabase-js');
 const { GoogleGenAI } = require('@google/genai');
 
-// ── Auth (same pattern as all other SpendX API endpoints) ────────────
+// ── Models & Deprecation Safeguards ───────────────────────────────────
+// Known shut-down, deprecated, or preview-disabled Gemini models that must never be used
+const DEPRECATED_MODELS = new Set([
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-exp',
+  'gemini-2.0-flash-thinking-exp',
+  'gemini-2.0-pro-exp',
+  'gemini-1.0-pro',
+  'gemini-pro',
+]);
+
+// Candidate models in priority order:
+// Preferred: gemini-3.8-flash (if available to API key), followed by stable fallbacks
+const SUPPORTED_MODELS = [
+  'gemini-3.8-flash',
+  'gemini-2.5-flash',
+  'gemini-1.5-flash',
+];
+
+function getCandidateModels() {
+  const envModel = (process.env.GEMINI_MODEL || '').trim();
+  if (envModel) {
+    if (DEPRECATED_MODELS.has(envModel.toLowerCase())) {
+      console.warn('[Gemini Model Config]', {
+        warning: 'DEPRECATED_MODEL_OVERRIDE_IGNORED',
+        model: envModel,
+      });
+      return [...SUPPORTED_MODELS];
+    }
+    // Put user-specified supported model first, followed by fallbacks without duplicates
+    return [envModel, ...SUPPORTED_MODELS.filter(m => m !== envModel)];
+  }
+  return [...SUPPORTED_MODELS];
+}
+
+// ── Safe Diagnostics Logger ──────────────────────────────────────────
+// Logs ONLY status code, safe category, model, and request ID.
+// Never logs API keys, Authorization headers, or user message content.
+function categorizeError(err) {
+  if (!err) return { status: 500, category: 'UNKNOWN_ERROR' };
+
+  const status = Number(err.status) || (typeof err.message === 'string' && err.message.includes('404') ? 404 : 0);
+  const msg = (err.message || '').toLowerCase();
+
+  if (err.name === 'AbortError' || msg.includes('timeout') || msg.includes('aborted')) {
+    return { status: 504, category: 'TIMEOUT' };
+  }
+  if (status === 404 || msg.includes('not found') || msg.includes('unsupported') || msg.includes('is not available')) {
+    return { status: 404, category: 'MODEL_UNSUPPORTED_OR_NOT_FOUND' };
+  }
+  if (status === 429 || msg.includes('quota') || msg.includes('rate limit') || msg.includes('resource_exhausted')) {
+    return { status: 429, category: 'QUOTA_OR_RATE_LIMIT_EXCEEDED' };
+  }
+  if (status === 401 || status === 403 || msg.includes('api_key_invalid') || msg.includes('api key')) {
+    return { status: 503, category: 'API_KEY_INVALID_OR_FORBIDDEN' };
+  }
+  return { status: status || 500, category: 'PROVIDER_ERROR' };
+}
+
+function extractSafeRequestId(err) {
+  if (err && typeof err === 'object') {
+    if (err.requestId) return String(err.requestId);
+    if (err.response && err.response.headers) {
+      const h = err.response.headers;
+      const reqId = typeof h.get === 'function' ? h.get('x-request-id') : h['x-request-id'];
+      if (reqId) return String(reqId);
+    }
+  }
+  return undefined;
+}
+
+function logSafeDiagnostic(err, attemptedModel) {
+  const { status, category } = categorizeError(err);
+  const requestId = extractSafeRequestId(err);
+  console.error('[Gemini Diagnostic]', {
+    providerStatus: status,
+    category,
+    attemptedModel,
+    ...(requestId ? { requestId } : {}),
+  });
+}
+
+// ── Auth (Validates bearer token via Supabase Auth) ───────────────────
 async function getAuthenticatedClient(req) {
   const authHeader = req.headers.authorization;
   if (!authHeader) return { supabase: null, user: null };
-  const token = authHeader.replace('Bearer ', '');
+
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  if (!token) return { supabase: null, user: null };
+
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
-    console.error('Supabase server environment variables are missing');
+    console.error('[Auth Diagnostic]', { category: 'SUPABASE_ENV_MISSING' });
     return { supabase: null, user: null };
   }
+
   try {
     const supabase = createClient(
       process.env.SUPABASE_URL,
@@ -22,11 +108,13 @@ async function getAuthenticatedClient(req) {
         }
       }
     );
-    const { data, error } = await supabase.auth.getUser();
-    if (error || !data || !data.user) return { supabase: null, user: null };
+    const { data, error } = await supabase.auth.getUser(token);
+    if (error || !data || !data.user) {
+      return { supabase: null, user: null };
+    }
     return { supabase, user: data.user };
   } catch (err) {
-    console.error('Auth verification error:', err.message);
+    console.error('[Auth Diagnostic]', { category: 'AUTH_VERIFICATION_EXCEPTION' });
     return { supabase: null, user: null };
   }
 }
@@ -140,7 +228,7 @@ Tone: Professional yet approachable. Think of yourself as a knowledgeable friend
 
 // ── Main handler ─────────────────────────────────────────────────────
 module.exports = async (req, res) => {
-  // CORS headers (same as all other SpendX endpoints)
+  // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -173,7 +261,7 @@ module.exports = async (req, res) => {
     }
   } catch (rateLimitError) {
     // Fail closed — deny on rate limiter error
-    console.error('Rate limiter error:', rateLimitError.message);
+    console.error('[Rate Limiter Diagnostic]', { category: 'RATE_LIMITER_EXCEPTION' });
     return res.status(503).json({
       error: { code: 'SERVICE_ERROR', message: 'Service temporarily unavailable. Please try again.' }
     });
@@ -210,13 +298,11 @@ module.exports = async (req, res) => {
   // ── Gemini configuration check ───────────────────────────────────
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    console.error('GEMINI_API_KEY is not configured');
+    console.error('[Gemini Diagnostic]', { category: 'GEMINI_API_KEY_MISSING' });
     return res.status(503).json({
       error: { code: 'CONFIG_ERROR', message: 'AI assistant is not configured. Please contact support.' }
     });
   }
-
-  const modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
 
   // ── Build conversation contents ──────────────────────────────────
   const { message, history = [] } = body;
@@ -238,62 +324,85 @@ module.exports = async (req, res) => {
     parts: [{ text: trimmedMessage }]
   });
 
-  // ── Call Gemini ──────────────────────────────────────────────────
+  // ── Execute Gemini with Model Fallback ────────────────────────────
+  const candidateModels = getCandidateModels();
+  let reply = null;
+  let lastError = null;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
+
   try {
     const ai = new GoogleGenAI({ apiKey });
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
+    for (let i = 0; i < candidateModels.length; i++) {
+      const currentModel = candidateModels[i];
+      try {
+        const response = await ai.models.generateContent({
+          model: currentModel,
+          contents: contents,
+          config: {
+            systemInstruction: SYSTEM_INSTRUCTION,
+            maxOutputTokens: 1024,
+            temperature: 0.7,
+            abortSignal: controller.signal,
+          },
+        });
 
-    const response = await ai.models.generateContent({
-      model: modelName,
-      contents: contents,
-      systemInstruction: SYSTEM_INSTRUCTION,
-      config: {
-        maxOutputTokens: 1024,
-        temperature: 0.7,
-      },
-    }, { signal: controller.signal });
+        if (response && response.text && response.text.trim().length > 0) {
+          reply = response.text.trim();
+          break; // successfully generated
+        }
+      } catch (err) {
+        lastError = err;
+        logSafeDiagnostic(err, currentModel);
 
+        const { category } = categorizeError(err);
+        // If the model was not found or unsupported, attempt the next fallback model
+        if (category === 'MODEL_UNSUPPORTED_OR_NOT_FOUND' && i < candidateModels.length - 1) {
+          continue;
+        }
+
+        // Fatal errors (invalid API key, quota, timeout, etc.) should not loop through fallbacks
+        break;
+      }
+    }
+  } finally {
     clearTimeout(timeout);
+  }
 
-    const reply = response.text;
+  if (reply) {
+    return res.status(200).json({ reply });
+  }
 
-    if (!reply || reply.trim().length === 0) {
-      return res.status(502).json({
-        error: { code: 'AI_EMPTY_RESPONSE', message: 'The assistant could not generate a response. Please try again.' }
-      });
-    }
+  // Map to safe client error code and message
+  const { category } = categorizeError(lastError);
 
-    return res.status(200).json({ reply: reply.trim() });
-
-  } catch (err) {
-    // Don't log the full error object (may contain API key in stack traces)
-    const errMessage = err.message || 'Unknown error';
-    console.error('Gemini API error:', errMessage);
-
-    if (err.name === 'AbortError') {
-      return res.status(504).json({
-        error: { code: 'AI_TIMEOUT', message: 'The assistant took too long to respond. Please try again.' }
-      });
-    }
-
-    // Handle quota / rate limit errors from Gemini
-    if (errMessage.includes('429') || errMessage.toLowerCase().includes('quota') || errMessage.toLowerCase().includes('rate limit')) {
-      return res.status(429).json({
-        error: { code: 'AI_QUOTA_EXCEEDED', message: 'AI service is temporarily busy. Please try again in a few moments.' }
-      });
-    }
-
-    // Handle invalid API key
-    if (errMessage.includes('401') || errMessage.includes('403') || errMessage.toLowerCase().includes('api key')) {
-      return res.status(503).json({
-        error: { code: 'CONFIG_ERROR', message: 'AI assistant is not configured correctly. Please contact support.' }
-      });
-    }
-
-    return res.status(500).json({
-      error: { code: 'AI_ERROR', message: 'Unable to generate a response. Please try again later.' }
+  if (category === 'TIMEOUT') {
+    return res.status(504).json({
+      error: { code: 'AI_TIMEOUT', message: 'The assistant took too long to respond. Please try again.' }
     });
   }
+
+  if (category === 'QUOTA_OR_RATE_LIMIT_EXCEEDED') {
+    return res.status(429).json({
+      error: { code: 'AI_QUOTA_EXCEEDED', message: 'AI service is temporarily busy. Please try again in a few moments.' }
+    });
+  }
+
+  if (category === 'API_KEY_INVALID_OR_FORBIDDEN') {
+    return res.status(503).json({
+      error: { code: 'CONFIG_ERROR', message: 'AI assistant is not configured correctly. Please contact support.' }
+    });
+  }
+
+  if (category === 'MODEL_UNSUPPORTED_OR_NOT_FOUND') {
+    return res.status(503).json({
+      error: { code: 'MODEL_UNAVAILABLE', message: 'The AI model is currently unavailable. Please try again later.' }
+    });
+  }
+
+  return res.status(500).json({
+    error: { code: 'AI_ERROR', message: 'Unable to generate a response. Please try again later.' }
+  });
 };
