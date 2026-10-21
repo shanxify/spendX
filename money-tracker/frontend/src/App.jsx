@@ -20,6 +20,7 @@ import GuestTransactions from './pages/demo/GuestTransactions';
 import GuestCategories from './pages/demo/GuestCategories';
 import { DemoProvider } from './context/DemoContext';
 import IntroVideoModal from './components/Onboarding/IntroVideoModal';
+import Chatbot from './components/Chatbot/Chatbot';
 
 function AppContent() {
   const { user, loading: authLoading } = useAuth();
@@ -161,6 +162,8 @@ function AppContent() {
                 </main>
               </div>
             </div>
+            {/* SpendX AI Assistant (Authenticated only) */}
+            <Chatbot />
           </div>
         </div>
       </Router>

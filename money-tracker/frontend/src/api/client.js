@@ -105,6 +105,11 @@ export const Client = {
   sendFeedback: async (message) => {
     const response = await api.post('/feedback', { message });
     return response.data;
+  },
+
+  sendChatMessage: async (message, history = []) => {
+    const response = await api.post('/chat', { message, history });
+    return response.data;
   }
 };
 
