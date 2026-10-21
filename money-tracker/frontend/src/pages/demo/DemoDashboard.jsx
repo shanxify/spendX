@@ -185,7 +185,7 @@ const DemoDashboard = () => {
             Upload a statement PDF to see your financial analytics.
           </p>
           <button 
-            onClick={() => navigate('/demo/upload')}
+            onClick={() => navigate('/guest/upload')}
             className="btn-primary bg-[#6c63ff] hover:bg-[#5b54e0]"
           >
             Upload Statement
@@ -204,6 +204,25 @@ const DemoDashboard = () => {
       
       <div className="px-6 lg:px-10 py-6 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
         
+        {/* Sample Data Disclaimer Banner */}
+        <div className="bg-[#12121c] border border-purple-500/20 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">✨</span>
+            <div>
+              <h4 className="text-sm font-semibold text-white">Sample Financial Analytics (Guest Mode)</h4>
+              <p className="text-xs text-gray-400">
+                You are viewing sample UPI data. Sign in to upload your real statements and access your personal dashboard.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => { window.location.href = '/'; }}
+            className="shrink-0 px-3.5 py-1.5 text-xs font-semibold text-purple-300 hover:text-white bg-purple-600/20 hover:bg-purple-600/40 border border-purple-500/30 rounded-xl transition-all"
+          >
+            Log In for Full Access →
+          </button>
+        </div>
+
         {/* STAT CARDS */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <BorderGlow
@@ -484,7 +503,7 @@ const DemoDashboard = () => {
           zIndex: 50
         }}
       >
-        Demo Mode — data is not saved
+        Guest Mode — Sample Data
       </div>
     </div>
   );

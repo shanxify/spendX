@@ -16,6 +16,8 @@ import DemoLayout from './pages/demo/DemoLayout';
 import DemoUpload from './pages/demo/DemoUpload';
 import DemoMerchants from './pages/demo/DemoMerchants';
 import DemoDashboard from './pages/demo/DemoDashboard';
+import GuestTransactions from './pages/demo/GuestTransactions';
+import GuestCategories from './pages/demo/GuestCategories';
 import { DemoProvider } from './context/DemoContext';
 import IntroVideoModal from './components/Onboarding/IntroVideoModal';
 
@@ -29,17 +31,30 @@ function AppContent() {
     return <IntroLoader onFinish={() => setIntroLoading(false)} />;
   }
 
-  const isDemoRoute = window.location.pathname.startsWith('/demo');
-  if (isDemoRoute) {
+  const isDemoOrGuestRoute = window.location.pathname.startsWith('/demo') || window.location.pathname.startsWith('/guest');
+  if (isDemoOrGuestRoute) {
     return (
       <DemoProvider>
         <Router>
           <DemoLayout>
             <Routes>
-              <Route path="/demo" element={<Navigate to="/demo/upload" replace />} />
-              <Route path="/demo/upload"    element={<DemoUpload />} />
-              <Route path="/demo/merchants" element={<DemoMerchants />} />
-              <Route path="/demo/dashboard" element={<DemoDashboard />} />
+              {/* Canonical Guest Routes */}
+              <Route path="/guest" element={<Navigate to="/guest/dashboard" replace />} />
+              <Route path="/guest/dashboard" element={<DemoDashboard />} />
+              <Route path="/guest/transactions" element={<GuestTransactions />} />
+              <Route path="/guest/categories" element={<GuestCategories />} />
+              <Route path="/guest/merchants" element={<DemoMerchants />} />
+              <Route path="/guest/upload" element={<DemoUpload />} />
+
+              {/* Backward compatibility for /demo routes */}
+              <Route path="/demo" element={<Navigate to="/guest/dashboard" replace />} />
+              <Route path="/demo/dashboard" element={<Navigate to="/guest/dashboard" replace />} />
+              <Route path="/demo/merchants" element={<Navigate to="/guest/merchants" replace />} />
+              <Route path="/demo/upload" element={<Navigate to="/guest/upload" replace />} />
+              <Route path="/demo/*" element={<Navigate to="/guest/dashboard" replace />} />
+
+              {/* Fallback */}
+              <Route path="*" element={<Navigate to="/guest/dashboard" replace />} />
             </Routes>
           </DemoLayout>
         </Router>

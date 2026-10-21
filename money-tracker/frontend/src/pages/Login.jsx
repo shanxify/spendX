@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import GuestConfirmationModal from '../components/Guest/GuestConfirmationModal';
 
 export default function Login() {
   const { signInWithGoogle } = useAuth();
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [isGuestModalOpen, setIsGuestModalOpen] = useState(false);
 
   const handleSignIn = async () => {
     setError(null);
@@ -19,8 +21,17 @@ export default function Login() {
     }
   };
 
-  const handleDemoClick = () => {
-    window.location.href = '/demo/dashboard';
+  const handleGuestClick = () => {
+    setIsGuestModalOpen(true);
+  };
+
+  const handleGuestContinue = () => {
+    setIsGuestModalOpen(false);
+    window.location.href = '/guest/dashboard';
+  };
+
+  const handleGuestLogin = () => {
+    setIsGuestModalOpen(false);
   };
 
   return (
@@ -123,7 +134,7 @@ export default function Login() {
         </button>
 
         <button
-          onClick={handleDemoClick}
+          onClick={handleGuestClick}
           style={{
             width: '100%',
             padding: '12px 20px',
@@ -139,12 +150,19 @@ export default function Login() {
           onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(124, 58, 237, 0.25)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'rgba(124, 58, 237, 0.15)'; }}
         >
-          Explore in Demo Mode →
+          Use Without Login →
         </button>
 
         <p style={{ color: '#606080', fontSize: '12px', marginTop: '24px' }}>
           Your data stays private — only you can see your transactions
         </p>
+
+        <GuestConfirmationModal
+          isOpen={isGuestModalOpen}
+          onClose={() => setIsGuestModalOpen(false)}
+          onContinue={handleGuestContinue}
+          onLogin={handleGuestLogin}
+        />
       </div>
     </div>
   );

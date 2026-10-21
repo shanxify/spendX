@@ -47,7 +47,7 @@ const DemoMerchants = () => {
             Go back to Upload first and import a statement PDF to start mapping merchants.
           </p>
           <button 
-            onClick={() => navigate('/demo/upload')}
+            onClick={() => navigate('/guest/upload')}
             className="btn-primary bg-[#6c63ff] hover:bg-[#5b54e0]"
           >
             Go to Upload
@@ -64,7 +64,7 @@ const DemoMerchants = () => {
         meta="Map merchants to categories for automatic categorization"
         actions={
           <button 
-            onClick={() => navigate('/demo/dashboard')}
+            onClick={() => navigate('/guest/dashboard')}
             className="btn-primary bg-[#6c63ff] hover:bg-[#5b54e0] font-medium text-sm flex items-center gap-2 py-2 px-4 shadow-[0_0_15px_rgba(108,99,255,0.25)]"
           >
             Continue to Dashboard →
@@ -78,9 +78,9 @@ const DemoMerchants = () => {
         <div className="glass-panel p-4 flex gap-3 items-start border border-accent/20 bg-[#6C63FF]/5 rounded-2xl">
           <span className="text-lg">💡</span>
           <div>
-            <h4 className="text-sm font-bold text-white mb-0.5">Map Merchants to Categories (Demo Mode)</h4>
+            <h4 className="text-sm font-bold text-white mb-0.5">Sample Merchant Mapping (Guest Mode)</h4>
             <p className="text-xs text-text-muted leading-relaxed">
-              Updates occur instantly in-memory. Map your merchants below, then proceed to the Dashboard to see your parsed metrics.
+              SpendX groups identical UPI merchant transactions together for quick categorization. In Guest Mode, changes reflect in-memory. Log in to save permanent rules.
             </p>
           </div>
         </div>

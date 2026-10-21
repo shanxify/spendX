@@ -270,15 +270,26 @@ const DemoUpload = () => {
               </div>
             </div>
             
-            <div className="flex gap-4">
+            <div className="flex flex-col sm:flex-row gap-4">
               <button onClick={resetState} className="flex-1 btn-secondary">
                 Upload Another
               </button>
               <button 
-                onClick={() => navigate('/demo/merchants')} 
+                onClick={() => navigate('/guest/merchants')} 
                 className="flex-1 btn-primary text-center"
               >
                 Continue to Merchant Mapping →
+              </button>
+            </div>
+            <div className="mt-6 pt-4 border-t border-white/5 text-center">
+              <p className="text-xs text-gray-400 mb-2">
+                Parsed locally in Guest Mode. Log in to permanently save these transactions to your account.
+              </p>
+              <button
+                onClick={() => { window.location.href = '/'; }}
+                className="text-xs font-semibold text-purple-400 hover:text-purple-300 underline"
+              >
+                Log In to Save Permanently →
               </button>
             </div>
           </div>
@@ -303,7 +314,26 @@ const DemoUpload = () => {
       />
       
       <div className="px-6 lg:px-10 py-6 flex justify-center">
-        <div className="max-w-3xl mx-auto w-full">
+        <div className="max-w-3xl mx-auto w-full space-y-6">
+          {/* Guest Notice Banner */}
+          <div className="bg-[#12121c] border border-purple-500/20 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
+            <div className="flex items-center gap-3">
+              <span className="text-xl">📤</span>
+              <div>
+                <h4 className="text-sm font-semibold text-white">Client-Side Statement Preview (Guest Mode)</h4>
+                <p className="text-xs text-gray-400">
+                  Statements uploaded here are parsed strictly in your browser. Log in to permanently store your transactions in SpendX.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => { window.location.href = '/'; }}
+              className="shrink-0 px-3.5 py-1.5 text-xs font-semibold text-purple-300 hover:text-white bg-purple-600/20 hover:bg-purple-600/40 border border-purple-500/30 rounded-xl transition-all"
+            >
+              Log In for Permanent Storage →
+            </button>
+          </div>
+
           <div 
             className={`glass-panel p-6 sm:p-10 border-2 border-dashed transition-all duration-300 flex flex-col items-center justify-center min-h-[400px] ${
               !provider ? 'border-border-light' :

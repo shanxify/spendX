@@ -1,23 +1,11 @@
 import React, { createContext, useContext, useState } from 'react';
+import { SAMPLE_TRANSACTIONS, GUEST_CATEGORIES } from '../data/sampleData';
 
 const DemoContext = createContext();
 
-export const DEMO_CATEGORIES = [
-  { id: '1', name: 'Food & Dining',    color: '#f97316', icon: '🍔' },
-  { id: '2', name: 'Transport',        color: '#3b82f6', icon: '🚗' },
-  { id: '3', name: 'Shopping',         color: '#ec4899', icon: '🛍️' },
-  { id: '4', name: 'Entertainment',    color: '#8b5cf6', icon: '🎬' },
-  { id: '5', name: 'Utilities',        color: '#10b981', icon: '💡' },
-  { id: '6', name: 'Groceries',        color: '#f59e0b', icon: '🛒' },
-  { id: '7', name: 'Travel',           color: '#06b6d4', icon: '✈️' },
-  { id: '8', name: 'Health',           color: '#ef4444', icon: '💊' },
-  { id: '9', name: 'Uncategorized',    color: '#6b7280', icon: '📦' },
-];
+export const DEMO_CATEGORIES = GUEST_CATEGORIES;
 
 export const DemoProvider = ({ children }) => {
-  const [transactions, setTransactions] = useState([]);
-  const [merchants, setMerchants] = useState([]);
-
   // Derive merchants from transactions list
   const deriveMerchants = (txList) => {
     const groups = {};
@@ -33,7 +21,6 @@ export const DemoProvider = ({ children }) => {
       const group = groups[normalized];
       const display = group[0].merchant;
       
-      // Look for first non-uncategorized category in the group, or fallback to first item's category
       const categorizedTx = group.find(t => t.category && t.category !== 'Uncategorized');
       const category = categorizedTx ? categorizedTx.category : (group[0].category || 'Uncategorized');
 
@@ -55,6 +42,22 @@ export const DemoProvider = ({ children }) => {
         type
       };
     });
+  };
+
+  const [transactions, setTransactions] = useState(SAMPLE_TRANSACTIONS);
+  const [merchants, setMerchants] = useState(() => deriveMerchants(SAMPLE_TRANSACTIONS));
+  const [categories, setCategories] = useState(GUEST_CATEGORIES);
+  const [isLoginPromptOpen, setIsLoginPromptOpen] = useState(false);
+  const [loginPromptFeature, setLoginPromptFeature] = useState('');
+
+  const promptLogin = (featureName = '') => {
+    setLoginPromptFeature(featureName);
+    setIsLoginPromptOpen(true);
+  };
+
+  const closeLoginPrompt = () => {
+    setIsLoginPromptOpen(false);
+    setLoginPromptFeature('');
   };
 
   const setTransactionsFromParsed = (parsedArray) => {
@@ -90,15 +93,21 @@ export const DemoProvider = ({ children }) => {
   };
 
   const resetDemo = () => {
-    setTransactions([]);
-    setMerchants([]);
+    setTransactions(SAMPLE_TRANSACTIONS);
+    setMerchants(deriveMerchants(SAMPLE_TRANSACTIONS));
   };
 
   return (
     <DemoContext.Provider value={{
       transactions,
       merchants,
-      categories: DEMO_CATEGORIES,
+      categories,
+      setCategories,
+      isGuest: true,
+      isLoginPromptOpen,
+      loginPromptFeature,
+      promptLogin,
+      closeLoginPrompt,
       setTransactionsFromParsed,
       updateMerchantCategory,
       bulkUpdateMerchants,
