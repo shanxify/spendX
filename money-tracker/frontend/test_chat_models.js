@@ -146,9 +146,9 @@ async function runTestSuite() {
     await handler(req, res);
 
     assert.strictEqual(res.statusCode, 200, 'Should succeed on fallback model');
-    assert(res.body.reply.includes('gemini-2.5-flash'), 'Should receive response from fallback model');
-    assert.deepStrictEqual(attemptedModels, ['gemini-3.8-flash', 'gemini-2.5-flash'], 'Should have attempted 3.8 then 2.5');
-    console.log('✅ Test 4 Passed: Automatic fallback from gemini-3.8-flash to gemini-2.5-flash');
+    assert(res.body.reply.includes('gemini-3.5-flash-lite'), 'Should receive response from fallback model');
+    assert.deepStrictEqual(attemptedModels, ['gemini-3.8-flash', 'gemini-3.5-flash-lite'], 'Should have attempted 3.8 then 3.5-lite');
+    console.log('✅ Test 4 Passed: Automatic fallback from gemini-3.8-flash to gemini-3.5-flash-lite');
   }
 
   // ── TEST 5: All models unsupported ──────────────────────────────

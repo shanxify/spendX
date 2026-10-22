@@ -13,11 +13,12 @@ const DEPRECATED_MODELS = new Set([
 ]);
 
 // Candidate models in priority order:
-// Preferred: gemini-3.8-flash (if available to API key), followed by stable fallbacks
+// Supports active Google Gemini models with intelligent fallback
 const SUPPORTED_MODELS = [
   'gemini-3.8-flash',
-  'gemini-2.5-flash',
-  'gemini-1.5-flash',
+  'gemini-3.5-flash-lite',
+  'gemini-3.5-flash',
+  'gemini-3-flash-preview',
 ];
 
 function getCandidateModels() {
@@ -324,19 +325,29 @@ module.exports = async (req, res) => {
     parts: [{ text: trimmedMessage }]
   });
 
-  // ── Execute Gemini with Model Fallback ────────────────────────────
+  // ── Execute Gemini with Resilient Model Fallback ──────────────────
   const candidateModels = getCandidateModels();
   let reply = null;
   let lastError = null;
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
+  // Global deadline for the entire request (25 seconds)
+  const deadline = Date.now() + 25000;
 
   try {
     const ai = new GoogleGenAI({ apiKey });
 
     for (let i = 0; i < candidateModels.length; i++) {
       const currentModel = candidateModels[i];
+      const remainingTime = deadline - Date.now();
+      if (remainingTime < 3000) {
+        break; // Stop if less than 3s remains to prevent hitting Vercel hard limit
+      }
+
+      // Per-attempt timeout: 8 seconds or remaining budget, whichever is smaller
+      const attemptTimeoutMs = Math.min(8000, remainingTime);
+      const attemptController = new AbortController();
+      const attemptTimer = setTimeout(() => attemptController.abort(), attemptTimeoutMs);
+
       try {
         const response = await ai.models.generateContent({
           model: currentModel,
@@ -345,30 +356,33 @@ module.exports = async (req, res) => {
             systemInstruction: SYSTEM_INSTRUCTION,
             maxOutputTokens: 1024,
             temperature: 0.7,
-            abortSignal: controller.signal,
+            abortSignal: attemptController.signal,
           },
         });
+
+        clearTimeout(attemptTimer);
 
         if (response && response.text && response.text.trim().length > 0) {
           reply = response.text.trim();
           break; // successfully generated
         }
       } catch (err) {
+        clearTimeout(attemptTimer);
         lastError = err;
         logSafeDiagnostic(err, currentModel);
 
         const { category } = categorizeError(err);
-        // If the model was not found or unsupported, attempt the next fallback model
-        if (category === 'MODEL_UNSUPPORTED_OR_NOT_FOUND' && i < candidateModels.length - 1) {
-          continue;
+        // Only stop if the API key is completely invalid across all models
+        if (category === 'API_KEY_INVALID_OR_FORBIDDEN') {
+          break;
         }
 
-        // Fatal errors (invalid API key, quota, timeout, etc.) should not loop through fallbacks
-        break;
+        // For all other errors (high demand 503, timeout, not found 404), seamlessly attempt the next fallback model
+        continue;
       }
     }
-  } finally {
-    clearTimeout(timeout);
+  } catch (outerErr) {
+    lastError = outerErr;
   }
 
   if (reply) {
