@@ -1,35 +1,39 @@
 import React from 'react';
-import { MessageCircle, X } from 'lucide-react';
+import { X } from 'lucide-react';
+import SpendXAiIcon from './SpendXAiIcon';
 
 function ChatbotButton({ onClick, isOpen }) {
   return (
     <button
       onClick={onClick}
-      aria-label={isOpen ? 'Close AI Assistant' : 'Open AI Assistant'}
+      aria-label={isOpen ? 'Close SpendX AI Assistant' : 'Open SpendX AI Assistant'}
+      aria-expanded={isOpen}
       className={`
-        fixed bottom-5 right-5 sm:bottom-6 sm:right-6 z-40
+        fixed bottom-5 right-4 sm:bottom-6 sm:right-6 z-40
         w-12 h-12 sm:w-14 sm:h-14
-        rounded-full shadow-lg shadow-purple-900/30
+        rounded-2xl shadow-xl shadow-purple-950/50
         flex items-center justify-center
         transition-all duration-300 ease-out
+        border
         focus:outline-none focus:ring-2 focus:ring-purple-400 focus:ring-offset-2 focus:ring-offset-[#060010]
-        ${isOpen
-          ? 'bg-[#1a1a2e] border border-white/10 hover:bg-[#22223a] rotate-0'
-          : 'bg-gradient-to-br from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 hover:scale-105'
+        ${
+          isOpen
+            ? 'bg-[#151528] border-white/15 hover:bg-[#1e1e36] text-gray-300'
+            : 'bg-gradient-to-br from-purple-600 via-purple-700 to-indigo-800 border-purple-400/30 hover:from-purple-500 hover:to-indigo-700 hover:scale-[1.04] text-white'
         }
       `}
     >
       {isOpen ? (
-        <X className="w-5 h-5 sm:w-6 sm:h-6 text-gray-300" />
+        <X className="w-5 h-5 sm:w-6 sm:h-6 text-gray-300" aria-hidden="true" />
       ) : (
-        <>
-          <MessageCircle className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
-          {/* Pulse ring on first load — respects prefers-reduced-motion */}
+        <div className="relative flex items-center justify-center">
+          <SpendXAiIcon className="w-6 h-6 sm:w-7 sm:h-7" />
+          {/* Subtle initial ping badge */}
           <span
-            className="absolute inset-0 rounded-full bg-purple-500/30 motion-safe:animate-ping"
-            style={{ animationIterationCount: 3, animationDuration: '1.5s' }}
+            className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-400 border border-[#060010]"
+            aria-hidden="true"
           />
-        </>
+        </div>
       )}
     </button>
   );

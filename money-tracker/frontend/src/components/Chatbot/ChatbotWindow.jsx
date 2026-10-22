@@ -1,21 +1,31 @@
 import React, { useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Sparkles, AlertCircle, RefreshCw } from 'lucide-react';
+import { X, AlertCircle, RefreshCw } from 'lucide-react';
 import ChatMessage from './ChatMessage';
 import ChatInput from './ChatInput';
+import SpendXAiIcon from './SpendXAiIcon';
 
 const SUGGESTED_PROMPTS = [
-  'How do I upload a PhonePe PDF?',
-  'How does SpendX categorize transactions?',
-  'Explain the dashboard',
-  'Give me budgeting tips',
+  'What was my biggest expense?',
+  'Show spending by category',
+  'Compare this month vs last month',
+  'How do I upload a statement?',
 ];
 
-function ChatbotWindow({ isOpen, onClose, messages, isLoading, error, onSend, onRetry, onClearError }) {
+function ChatbotWindow({
+  isOpen,
+  onClose,
+  messages,
+  isLoading,
+  error,
+  onSend,
+  onRetry,
+  onClearError,
+}) {
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
 
-  // Auto-scroll to bottom on new messages
+  // Auto-scroll to bottom on new messages or typing indicator
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
@@ -31,94 +41,142 @@ function ChatbotWindow({ isOpen, onClose, messages, isLoading, error, onSend, on
     return () => document.removeEventListener('keydown', handleKey);
   }, [isOpen, onClose]);
 
-  // Only show suggested prompts if we have just the welcome message
+  // Only show suggested prompts when only the welcome message is present
   const showSuggestions = messages.length === 1 && messages[0].id === 'welcome';
 
   return (
     <AnimatePresence>
       {isOpen && (
         <motion.div
-          initial={{ opacity: 0, y: 20, scale: 0.95 }}
+          initial={{ opacity: 0, y: 16, scale: 0.96 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: 20, scale: 0.95 }}
-          transition={{ duration: 0.2, ease: 'easeOut' }}
+          exit={{ opacity: 0, y: 16, scale: 0.96 }}
+          transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
           role="dialog"
+          aria-modal="true"
           aria-label="SpendX AI Assistant"
-          className="fixed bottom-20 right-4 sm:right-6 z-50 w-[calc(100vw-2rem)] sm:w-[400px] h-[min(560px,calc(100vh-7rem))] flex flex-col bg-[#0e0e1a] border border-white/10 rounded-2xl shadow-2xl shadow-purple-900/20 overflow-hidden"
-          style={{ maxHeight: 'calc(100dvh - 7rem)' }}
+          className="fixed bottom-20 sm:bottom-24 right-3 sm:right-6 z-50 w-[calc(100vw-1.5rem)] sm:w-[410px] h-[min(590px,calc(100dvh-6.5rem))] flex flex-col bg-[#0b0b16] border border-white/10 rounded-2xl shadow-2xl shadow-purple-950/40 overflow-hidden backdrop-blur-md"
         >
           {/* ── Header ────────────────────────────────────── */}
-          <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-purple-600/20 to-purple-800/10 border-b border-white/10 shrink-0">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center">
-                <Sparkles className="w-4 h-4 text-purple-400" />
+          <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-purple-950/50 via-[#131124] to-[#0d0c18] border-b border-white/[0.08] shrink-0">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div
+                className="w-8 h-8 rounded-xl bg-gradient-to-br from-purple-500/25 to-indigo-600/20 border border-purple-500/30 flex items-center justify-center flex-shrink-0 shadow-sm shadow-purple-950/50"
+                aria-hidden="true"
+              >
+                <SpendXAiIcon className="w-4 h-4" />
               </div>
-              <div>
-                <h2 className="text-sm font-semibold text-white leading-tight">SpendX AI Assistant</h2>
-                <p className="text-[11px] text-gray-400 leading-tight">Your personal finance companion</p>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <h2 className="text-sm font-semibold text-white tracking-tight truncate">
+                    SpendX AI Assistant
+                  </h2>
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
+                </div>
+                <p className="text-[11px] text-gray-400 truncate">
+                  Your personal finance companion
+                </p>
               </div>
             </div>
+
             <button
               onClick={onClose}
-              aria-label="Close assistant"
-              className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+              aria-label="Close SpendX AI Assistant"
+              className="p-1.5 text-gray-400 hover:text-white hover:bg-white/[0.08] active:bg-white/[0.12] rounded-lg transition-colors focus:outline-none focus:ring-1 focus:ring-purple-400/50"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
 
-          {/* ── Messages ──────────────────────────────────── */}
+          {/* ── Messages Container ────────────────────────── */}
           <div
             ref={messagesContainerRef}
-            className="flex-1 overflow-y-auto px-4 py-3 space-y-3 scrollbar-thin"
+            className="flex-1 overflow-y-auto px-3.5 sm:px-4 py-3 space-y-3.5 scrollbar-thin scrollbar-thumb-purple-900/40 scrollbar-track-transparent"
+            tabIndex={0}
+            role="log"
+            aria-live="polite"
           >
             {messages.map((msg) => (
               <ChatMessage key={msg.id} message={msg} />
             ))}
 
-            {/* Suggested prompts */}
+            {/* Suggested quick prompts */}
             {showSuggestions && (
-              <div className="flex flex-wrap gap-2 pt-1">
-                {SUGGESTED_PROMPTS.map((prompt) => (
-                  <button
-                    key={prompt}
-                    onClick={() => onSend(prompt)}
-                    className="text-xs px-3 py-1.5 bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/20 hover:border-purple-500/40 rounded-full transition-colors whitespace-nowrap"
-                  >
-                    {prompt}
-                  </button>
-                ))}
+              <div className="pt-2">
+                <p className="text-[11px] uppercase tracking-wider text-purple-300/60 font-semibold mb-2 px-1">
+                  Suggested Questions
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {SUGGESTED_PROMPTS.map((prompt) => (
+                    <button
+                      key={prompt}
+                      onClick={() => onSend(prompt)}
+                      className="text-xs px-3 py-1.5 bg-purple-500/[0.08] hover:bg-purple-500/[0.18] active:bg-purple-500/[0.25] text-purple-200 border border-purple-500/20 hover:border-purple-400/40 rounded-full transition-all text-left break-words"
+                    >
+                      {prompt}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
 
-            {/* Loading indicator */}
+            {/* Typing indicator */}
             {isLoading && (
-              <div className="flex gap-2.5">
-                <div className="flex-shrink-0 w-7 h-7 rounded-full bg-purple-500/20 flex items-center justify-center">
-                  <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+              <div
+                className="flex items-start gap-2.5"
+                role="status"
+                aria-label="SpendX Assistant is thinking"
+              >
+                <div
+                  className="flex-shrink-0 w-7 h-7 rounded-xl bg-gradient-to-br from-purple-500/25 to-indigo-600/20 border border-purple-500/30 flex items-center justify-center mt-0.5 shadow-sm"
+                  aria-hidden="true"
+                >
+                  <SpendXAiIcon className="w-4 h-4" />
                 </div>
-                <div className="bg-[#1a1a2e] border border-white/5 rounded-2xl rounded-bl-md px-4 py-3">
-                  <div className="flex gap-1">
-                    <span className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <span className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <span className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                  </div>
+                <div className="bg-[#151528] border border-white/[0.08] rounded-2xl rounded-tl-xs px-3.5 py-3 shadow-md shadow-black/20 flex items-center gap-1.5">
+                  <span
+                    className="w-1.5 h-1.5 bg-purple-400 rounded-full motion-safe:animate-bounce"
+                    style={{ animationDuration: '0.9s', animationDelay: '0ms' }}
+                  />
+                  <span
+                    className="w-1.5 h-1.5 bg-purple-400 rounded-full motion-safe:animate-bounce"
+                    style={{ animationDuration: '0.9s', animationDelay: '180ms' }}
+                  />
+                  <span
+                    className="w-1.5 h-1.5 bg-purple-400 rounded-full motion-safe:animate-bounce"
+                    style={{ animationDuration: '0.9s', animationDelay: '360ms' }}
+                  />
                 </div>
               </div>
             )}
 
             {/* Error message */}
             {error && (
-              <div className="flex items-start gap-2 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2.5 text-sm">
+              <div
+                className="flex items-start gap-2.5 bg-red-950/20 border border-red-500/30 rounded-xl p-3 text-sm text-red-200 shadow-sm"
+                role="alert"
+              >
                 <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <p className="text-red-300 text-xs">{error}</p>
-                  <button
-                    onClick={onRetry}
-                    className="flex items-center gap-1 mt-1.5 text-xs text-purple-400 hover:text-purple-300 transition-colors"
-                  >
-                    <RefreshCw className="w-3 h-3" /> Try again
-                  </button>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-red-300 leading-relaxed">{error}</p>
+                  <div className="flex items-center gap-3 mt-2">
+                    {onRetry && (
+                      <button
+                        onClick={onRetry}
+                        className="inline-flex items-center gap-1.5 text-xs text-purple-300 hover:text-white font-medium transition-colors"
+                      >
+                        <RefreshCw className="w-3 h-3" /> Try again
+                      </button>
+                    )}
+                    {onClearError && (
+                      <button
+                        onClick={onClearError}
+                        className="text-xs text-gray-400 hover:text-gray-300 transition-colors"
+                      >
+                        Dismiss
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -126,7 +184,7 @@ function ChatbotWindow({ isOpen, onClose, messages, isLoading, error, onSend, on
             <div ref={messagesEndRef} />
           </div>
 
-          {/* ── Input ─────────────────────────────────────── */}
+          {/* ── Input Area ─────────────────────────────────── */}
           <ChatInput onSend={onSend} disabled={isLoading} />
         </motion.div>
       )}
