@@ -71,7 +71,6 @@ function ChatbotWindow({
                   <h2 className="text-sm font-semibold text-white tracking-tight truncate">
                     SpendX AI Assistant
                   </h2>
-                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
                 </div>
                 <p className="text-[11px] text-gray-400 truncate">
                   Your personal finance companion

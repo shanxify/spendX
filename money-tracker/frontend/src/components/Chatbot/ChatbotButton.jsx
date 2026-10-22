@@ -26,13 +26,8 @@ function ChatbotButton({ onClick, isOpen }) {
       {isOpen ? (
         <X className="w-5 h-5 sm:w-6 sm:h-6 text-gray-300" aria-hidden="true" />
       ) : (
-        <div className="relative flex items-center justify-center">
+        <div className="flex items-center justify-center">
           <SpendXAiIcon className="w-6 h-6 sm:w-7 sm:h-7" />
-          {/* Subtle initial ping badge */}
-          <span
-            className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-400 border border-[#060010]"
-            aria-hidden="true"
-          />
         </div>
       )}
     </button>
