@@ -17,20 +17,20 @@ function ChatMessage({ message }) {
     <div
       className={`flex items-end gap-2.5 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}
       role="article"
-      aria-label={isUser ? 'Your message' : 'SpendX AI response'}
+      aria-label={isUser ? 'Your message' : 'ArthX response'}
     >
       {/* Assistant Avatar */}
       {!isUser && (
         <div
-          className="flex-shrink-0 w-7 h-7 rounded-xl overflow-hidden border border-purple-500/30 shadow-sm shadow-purple-950/50"
+          className="flex-shrink-0 w-7 h-7 rounded-xl overflow-hidden border border-purple-500/30 bg-[#160a2c] shadow-sm shadow-purple-950/50"
           aria-hidden="true"
         >
-          <XSparkLogo size={28} className="w-full h-full" />
+          <XSparkLogo size={28} className="w-full h-full object-cover" />
         </div>
       )}
 
       {/* Bubble + Timestamp */}
-      <div className={`flex flex-col max-w-[82%] sm:max-w-[78%] ${isUser ? 'items-end' : 'items-start'}`}>
+      <div className={`flex flex-col max-w-[84%] sm:max-w-[80%] ${isUser ? 'items-end' : 'items-start'}`}>
         <div
           className={`px-3.5 py-2.5 text-[13.5px] leading-relaxed break-words overflow-hidden ${
             isUser
@@ -77,8 +77,12 @@ function ChatMessage({ message }) {
                     <h5 className="text-xs font-semibold text-purple-300 mb-1 mt-1.5 first:mt-0">{children}</h5>
                   ),
                   a: ({ href, children }) => (
-                    <a href={href} target="_blank" rel="noopener noreferrer"
-                      className="text-purple-400 hover:text-purple-300 underline underline-offset-2 transition-colors">
+                    <a
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-purple-400 hover:text-purple-300 underline underline-offset-2 transition-colors"
+                    >
                       {children}
                     </a>
                   ),

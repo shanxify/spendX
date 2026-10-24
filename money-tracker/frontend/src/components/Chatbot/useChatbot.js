@@ -7,7 +7,7 @@ const MAX_HISTORY_FOR_API = 10;
 
 const WELCOME_MESSAGE = {
   role: 'model',
-  text: "Hi! I'm your SpendX AI Assistant. I can help you use SpendX, import supported transaction statements, and understand budgeting concepts. What would you like help with?",
+  text: "Hi! I'm ArthX, your personal AI assistant. Ask me about your spending, transactions, and savings.",
   timestamp: Date.now(),
   id: 'welcome',
 };
@@ -43,7 +43,7 @@ export function useChatbot() {
     setIsLoading(true);
 
     try {
-      // Get fresh auth token
+      // Get fresh auth token from Supabase
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         setError('Your session has expired. Please sign in again.');
@@ -51,7 +51,7 @@ export function useChatbot() {
         return;
       }
 
-      // Build history for API (last N messages, excluding welcome)
+      // Build history for API (last N messages, excluding welcome message)
       const allMessages = [...messages.filter(m => m.id !== 'welcome'), userMsg];
       const historyForApi = allMessages.slice(-MAX_HISTORY_FOR_API).map(m => ({
         role: m.role,
@@ -103,7 +103,7 @@ export function useChatbot() {
     } catch (err) {
       if (err.name === 'AbortError') return;
       console.error('Chat error:', err);
-      setError('Failed to reach the assistant. Please check your connection and try again.');
+      setError('Failed to reach ArthX. Please check your connection and try again.');
     } finally {
       setIsLoading(false);
       abortRef.current = null;

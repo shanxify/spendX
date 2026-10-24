@@ -162,7 +162,7 @@ function AppContent() {
                 </main>
               </div>
             </div>
-            {/* SpendX AI Assistant (Authenticated only) */}
+            {/* ArthX AI Assistant (Authenticated only) */}
             <Chatbot />
           </div>
         </div>

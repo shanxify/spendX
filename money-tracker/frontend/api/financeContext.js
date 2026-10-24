@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * financeContext.js — Server-side financial context builder for SpendX AI Assistant.
+ * financeContext.js — Server-side financial context builder for ArthX AI Assistant.
  *
  * Queries the authenticated user's transactions from Supabase and returns a
  * compact, structured summary suitable for injection into the Gemini system prompt.

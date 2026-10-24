@@ -1,9 +1,9 @@
 import React from 'react';
 
 /**
- * XSparkLogo — Official SpendX AI assistant logo.
- * Renders the X-Spark image asset with consistent sizing and accessibility.
- * Falls back gracefully if the asset fails to load.
+ * XSparkLogo — Official ArthX AI assistant logo for SpendX.
+ * Renders the ArthX X-Spark image asset (/arthx-logo.png) with consistent sizing.
+ * Falls back gracefully to SVG X-Spark if the asset fails to load.
  */
 function XSparkLogo({ size = 28, className = '', showFallback = false }) {
   const [imgError, setImgError] = React.useState(false);
@@ -42,8 +42,8 @@ function XSparkLogo({ size = 28, className = '', showFallback = false }) {
 
   return (
     <img
-      src="/spendx-ai-logo.png"
-      alt="SpendX AI"
+      src="/arthx-logo.png"
+      alt="ArthX"
       width={size}
       height={size}
       className={className}
@@ -54,4 +54,4 @@ function XSparkLogo({ size = 28, className = '', showFallback = false }) {
   );
 }
 
-export default XSparkLogo;
+export default React.memo(XSparkLogo);

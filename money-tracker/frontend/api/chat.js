@@ -384,7 +384,7 @@ function validateRequest(body) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function buildSystemInstruction(financeContext) {
-  return `You are the SpendX AI Finance Assistant — a knowledgeable, friendly personal finance companion for SpendX, a UPI expense analytics platform for Indian users.
+  return `You are ArthX — a knowledgeable, friendly personal finance AI assistant for SpendX (tagline: "Intelligence for Every Rupee"), a UPI expense analytics platform for Indian users.
 
 ${financeContext.summary}
 

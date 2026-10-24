@@ -13,6 +13,6 @@
     { "source": "/api/upload(.*)", "destination": "/api/upload.js" },
     { "source": "/api/feedback(.*)", "destination": "/api/feedback.js" },
     { "source": "/api/chat(.*)", "destination": "/api/chat.js" },
-    { "source": "/((?!static|favicon|manifest|logo|robots).*)", "destination": "/index.html" }
+    { "source": "/((?!static|favicon|manifest|logo|robots|arthx|spendx).*)", "destination": "/index.html" }
   ]
 }
