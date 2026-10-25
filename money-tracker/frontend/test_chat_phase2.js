@@ -766,6 +766,230 @@ async function runTests() {
     assert(resInvalid._result.statusCode === 400, 'Invalid openingBalance string returns 400');
   }
 
+  // ──────────────────────────────────────────────────────────────────────────
+  // SUITE 13: ArthX Strict Finance-Only Scope & Behavioral Verification
+  // ──────────────────────────────────────────────────────────────────────────
+  console.log('\n' + YELLOW + '◆ Suite 13: ArthX Strict Finance-Only Scope & Behavioral Verification' + RESET);
+  {
+    setEnv();
+    clearHandlerCache();
+
+    const SUITE13_TXNS = [
+      { id: 't1', type: 'credit', amount: 9302.00, category: 'Salary', merchant: 'Employer', status: 'Success', date: CURRENT_MONTH_STR },
+      { id: 't2', type: 'debit', amount: 14278.15, category: 'Rent & Living', merchant: 'Landlord', status: 'Success', date: CURRENT_MONTH_STR },
+    ];
+
+    let capturedSystemPrompt = null;
+    let capturedUserMessage = null;
+
+    googleGenAIMock = {
+      GoogleGenAI: class {
+        constructor() {}
+        get models() {
+          return {
+            generateContent: async ({ contents, config }) => {
+              capturedSystemPrompt = config?.systemInstruction || '';
+              const userPart = contents?.find(c => c.role === 'user')?.parts?.[0]?.text || '';
+              capturedUserMessage = userPart;
+
+              if (userPart.toLowerCase().includes('biggest expense')) {
+                return { text: 'Your biggest single expense was ₹14,278.15 at Landlord (Rent & Living) on ' + CURRENT_MONTH_STR + '.' };
+              }
+              if (userPart.toLowerCase().includes('balance')) {
+                return { text: 'Your current balance is ₹23.85, which includes your opening balance of ₹5,000.00.' };
+              }
+              if (userPart.toLowerCase().includes('upload a statement')) {
+                return { text: 'To upload a statement, navigate to the Upload page in SpendX. We support PDF statements from PhonePe, Google Pay, and Paytm.' };
+              }
+              if (userPart.toLowerCase().includes('apple') && userPart.toLowerCase().includes('biggest')) {
+                return { text: 'Your biggest expense was ₹14,278.15 at Landlord. Regarding the apple, I am a finance-only AI assistant for SpendX.' };
+              }
+              return { text: "I'm ArthX, your finance-only AI assistant for SpendX. I can help with your expenses, transactions, budgets, savings, and financial insights. Please ask me a finance-related question." };
+            },
+          };
+        }
+      },
+    };
+
+    supabaseMock = {
+      createClient: () => ({
+        auth: {
+          getUser: async () => ({
+            data: { user: { id: 'user-a-uuid', user_metadata: { opening_balance: 5000 } } },
+            error: null,
+          }),
+        },
+        from: () => ({
+          select: () => ({
+            eq: () => makeQueryChain(SUITE13_TXNS, false),
+          }),
+        }),
+      }),
+    };
+
+    clearHandlerCache();
+    const handler = require('./api/chat.js');
+
+    // 13a. Biggest expense question returns actual authorized financial data
+    {
+      const req = mockReq({
+        method: 'POST',
+        headers: { authorization: 'Bearer user-a-token' },
+        body: { message: 'What was my biggest expense?' },
+      });
+      const res = mockRes();
+      await handler(req, res);
+      assert(res._result.statusCode === 200, 'Biggest expense question returns 200');
+      assert(res._result.body?.reply?.includes('₹14,278.15'), 'Biggest expense returns actual authorised amount ₹14,278.15');
+      assert(res._result.body?.reply?.includes('Landlord'), 'Biggest expense returns authorised merchant Landlord');
+      assert(capturedSystemPrompt && capturedSystemPrompt.includes('Biggest Single Expense: ₹14,278.15 at Landlord'), 'Prompt contains authorised biggest expense data');
+    }
+
+    // 13b. Current balance includes opening balance and returns correct calculated amount ₹23.85
+    {
+      const req = mockReq({
+        method: 'POST',
+        headers: { authorization: 'Bearer user-a-token' },
+        body: { message: 'What is my current balance?' },
+      });
+      const res = mockRes();
+      await handler(req, res);
+      assert(res._result.statusCode === 200, 'Balance question returns 200');
+      assert(res._result.body?.reply?.includes('₹23.85'), 'Balance question correctly returns ₹23.85');
+      assert(res._result.body?.reply?.includes('5,000'), 'Balance question mentions opening balance ₹5,000');
+      assert(capturedSystemPrompt && capturedSystemPrompt.includes('Current Balance / Net Balance'), 'Prompt contains authoritative balance calculation');
+      assert(capturedSystemPrompt && capturedSystemPrompt.includes('₹23.85'), 'Prompt contains ₹23.85 current balance');
+    }
+
+    // 13c. Unrelated general knowledge: "What is the colour of an apple?"
+    // Expected: Finance redirect without red, green, or yellow factual answer
+    {
+      const req = mockReq({
+        method: 'POST',
+        headers: { authorization: 'Bearer user-a-token' },
+        body: { message: 'What is the colour of an apple?' },
+      });
+      const res = mockRes();
+      await handler(req, res);
+      assert(res._result.statusCode === 200, 'Apple question returns 200');
+      const reply = res._result.body?.reply || '';
+      assert(reply.includes("I'm ArthX, your finance-only AI assistant for SpendX"), 'Apple question receives finance-only redirect');
+      assert(!reply.toLowerCase().includes('red'), 'Apple question does NOT answer that apple is red');
+      assert(!reply.toLowerCase().includes('green'), 'Apple question does NOT answer that apple is green');
+      assert(!reply.toLowerCase().includes('yellow'), 'Apple question does NOT answer that apple is yellow');
+    }
+
+    // 13d. Unrelated general knowledge: "what is colour of apple" (casual phrasing from user screenshot)
+    {
+      const req = mockReq({
+        method: 'POST',
+        headers: { authorization: 'Bearer user-a-token' },
+        body: { message: 'what is colour of apple' },
+      });
+      const res = mockRes();
+      await handler(req, res);
+      assert(res._result.statusCode === 200, 'Casual apple query returns 200');
+      const reply = res._result.body?.reply || '';
+      assert(reply.includes("I'm ArthX, your finance-only AI assistant for SpendX"), 'Casual apple query receives finance-only redirect');
+      assert(!reply.toLowerCase().includes('red') && !reply.toLowerCase().includes('green'), 'Casual apple query does not provide colours');
+    }
+
+    // 13e. Romantic question: "Do you love me?"
+    // Expected: Politely redirect to finance-related help without engaging in romantic conversation
+    {
+      const req = mockReq({
+        method: 'POST',
+        headers: { authorization: 'Bearer user-a-token' },
+        body: { message: 'Do you love me?' },
+      });
+      const res = mockRes();
+      await handler(req, res);
+      assert(res._result.statusCode === 200, 'Romantic question returns 200');
+      const reply = res._result.body?.reply || '';
+      assert(reply.includes('finance'), 'Romantic question redirects to finance');
+      assert(!reply.toLowerCase().includes('i have a lot of love for helping'), 'Romantic question does not engage in flirtatious chat');
+    }
+
+    // 13f. Romantic question casual: "do u love me" (from user screenshot)
+    {
+      const req = mockReq({
+        method: 'POST',
+        headers: { authorization: 'Bearer user-a-token' },
+        body: { message: 'do u love me' },
+      });
+      const res = mockRes();
+      await handler(req, res);
+      assert(res._result.statusCode === 200, 'Casual romantic question returns 200');
+      assert(res._result.body?.reply?.includes('finance'), 'Casual romantic question redirects to finance');
+    }
+
+    // 13g. Assistant identity: "What's your name?"
+    // Expected: "I'm ArthX, your finance-only AI assistant in SpendX. I provide intelligence for every rupee."
+    {
+      const req = mockReq({
+        method: 'POST',
+        headers: { authorization: 'Bearer user-a-token' },
+        body: { message: "What's your name?" },
+      });
+      const res = mockRes();
+      await handler(req, res);
+      assert(res._result.statusCode === 200, "What's your name? returns 200");
+      const reply = res._result.body?.reply || '';
+      assert(reply.includes('ArthX'), "Identity reply includes 'ArthX'");
+      assert(reply.includes('intelligence for every rupee'), "Identity reply includes 'intelligence for every rupee'");
+    }
+
+    // 13h. SpendX support: "How do I upload a statement?"
+    {
+      const req = mockReq({
+        method: 'POST',
+        headers: { authorization: 'Bearer user-a-token' },
+        body: { message: 'How do I upload a statement?' },
+      });
+      const res = mockRes();
+      await handler(req, res);
+      assert(res._result.statusCode === 200, 'Upload statement question returns 200');
+      const reply = res._result.body?.reply || '';
+      assert(reply.includes('Upload page'), 'Upload question mentions Upload page');
+      assert(reply.includes('PhonePe'), 'Upload question mentions supported statements');
+    }
+
+    // 13i. System instruction prompt verification
+    assert(capturedSystemPrompt && capturedSystemPrompt.includes('strict, finance-only personal finance AI assistant'), 'Prompt defines strict finance-only persona');
+    assert(capturedSystemPrompt && capturedSystemPrompt.includes('NOT a general-purpose AI assistant'), 'Prompt explicitly rejects general-purpose identity');
+    assert(capturedSystemPrompt && capturedSystemPrompt.includes('What is the colour of an apple?'), 'Prompt explicitly cites apple colour prohibition');
+    assert(capturedSystemPrompt && capturedSystemPrompt.includes('DO NOT state that apples are red, green, or yellow'), 'Prompt forbids red, green, or yellow');
+    assert(capturedSystemPrompt && capturedSystemPrompt.includes('MIXED QUESTIONS'), 'Prompt includes mixed questions rule');
+    assert(capturedSystemPrompt && capturedSystemPrompt.includes('AMBIGUOUS & CASUAL QUESTIONS'), 'Prompt includes ambiguous/casual questions rule');
+
+    // 13j. Fail-safe output guard: catches accidental apple colour mention if model leaks
+    {
+      googleGenAIMock = {
+        GoogleGenAI: class {
+          constructor() {}
+          get models() {
+            return {
+              generateContent: async () => ({ text: 'The color of an apple is typically red, green, or yellow!' }),
+            };
+          }
+        },
+      };
+      clearHandlerCache();
+      const handlerGuard = require('./api/chat.js');
+      // Pass a non-exact query that bypasses quick regex to test the post-model guard
+      const req = mockReq({
+        method: 'POST',
+        headers: { authorization: 'Bearer user-a-token' },
+        body: { message: 'Can you tell me the colour of an apple please?' },
+      });
+      const res = mockRes();
+      await handlerGuard(req, res);
+      assert(res._result.statusCode === 200, 'Guard test returns 200');
+      assert(!res._result.body?.reply?.includes('red'), 'Output guard replaces leaked apple colours with finance redirect');
+      assert(res._result.body?.reply?.includes('finance-only AI assistant'), 'Output guard returns finance-only redirect');
+    }
+  }
+
   // ── Restore module loader ──────────────────────────────────────────────────
   Module._load = originalLoad;
   supabaseMock    = null;

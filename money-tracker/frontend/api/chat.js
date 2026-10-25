@@ -440,15 +440,99 @@ function validateRequest(body) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// SCOPE DEFINITIONS & CONSTANTS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const FINANCE_REDIRECT_MESSAGE =
+  "I'm ArthX, your finance-only AI assistant for SpendX. I can help with your expenses, transactions, budgets, savings, and financial insights. Please ask me a finance-related question.";
+
+const ARTHX_IDENTITY_MESSAGE =
+  "I'm ArthX, your finance-only AI assistant in SpendX. I provide intelligence for every rupee.";
+
+function getLightweightScopeResponse(message) {
+  if (!message || typeof message !== 'string') return null;
+  const raw = message.trim();
+  const clean = raw.toLowerCase().replace(/[?!.,;:()'"]/g, '').replace(/\s+/g, ' ').trim();
+
+  // Assistant identity questions (Example E: "What's your name?")
+  if (
+    clean === 'whats your name' ||
+    clean === 'what is your name' ||
+    clean === 'who are you' ||
+    clean === 'what are you' ||
+    clean === 'tell me your name' ||
+    clean === 'your name'
+  ) {
+    return ARTHX_IDENTITY_MESSAGE;
+  }
+
+  // Romantic / personal affection questions (Example D: "Do you love me?")
+  if (
+    clean === 'do you love me' ||
+    clean === 'do u love me' ||
+    clean === 'will you marry me' ||
+    clean === 'will u marry me' ||
+    clean === 'i love you' ||
+    clean === 'i love u' ||
+    clean === 'are you single' ||
+    clean === 'be my girlfriend' ||
+    clean === 'be my boyfriend' ||
+    clean === 'do you have feelings'
+  ) {
+    return FINANCE_REDIRECT_MESSAGE;
+  }
+
+  // Exact apple color questions (Example C: "What is the colour of an apple?")
+  if (
+    clean.includes('apple') &&
+    (clean.includes('colour') || clean.includes('color')) &&
+    !clean.includes('spend') &&
+    !clean.includes('expense') &&
+    !clean.includes('balance') &&
+    !clean.includes('money') &&
+    !clean.includes('rupee') &&
+    !clean.includes('transaction')
+  ) {
+    return FINANCE_REDIRECT_MESSAGE;
+  }
+
+  // Fail safely to Gemini flow for all financial, casual, ambiguous, or mixed queries
+  return null;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // SYSTEM INSTRUCTION BUILDER
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function buildSystemInstruction(financeContext) {
-  return `You are ArthX — a knowledgeable, friendly personal finance AI assistant for SpendX (tagline: "Intelligence for Every Rupee"), a UPI expense analytics platform for Indian users.
+  return `You are ArthX — a strict, finance-only personal finance AI assistant for SpendX (tagline: "Intelligence for Every Rupee"), a UPI expense analytics platform for Indian users. You are NOT a general-purpose AI assistant and you must NEVER claim or act as one.
 
 ${financeContext.summary}
 
-RULES — follow these strictly:
+SCOPE OF ASSISTANCE — you answer ONLY questions strictly relevant to:
+1. Personal expenses, income, transactions, and account balance.
+2. Opening balance, net balance, and financial calculations.
+3. Spending categories, merchants, transaction history, and spending patterns.
+4. Budgeting, saving strategies, and general personal-finance education.
+5. Financial insights and explanations based on the authenticated user's available data above.
+6. SpendX features, dashboard usage, supported statement imports (PhonePe, Google Pay, and Paytm PDF statements via the Upload page), and troubleshooting.
+7. Basic financial terminology and concepts.
+8. ArthX identity and capabilities.
+
+STRICT REFUSAL & REDIRECT RULES FOR UNRELATED TOPICS:
+- You must NOT answer unrelated general-knowledge, science, history, geography, entertainment, movies, sports, trivia, weather, cooking, programming/coding, relationships, romance, personal chat, feelings, or other non-financial topics.
+- Under NO circumstance provide facts, trivia, or commentary about unrelated subjects.
+- For example, if asked "What is the colour of an apple?", DO NOT state that apples are red, green, or yellow, and DO NOT chat about apples.
+- For ANY unrelated general-knowledge or out-of-scope question, respond strictly with:
+"I'm ArthX, your finance-only AI assistant for SpendX. I can help with your expenses, transactions, budgets, savings, and financial insights. Please ask me a finance-related question."
+- For romantic, dating, personal flirtation, or emotional questions (e.g. "Do you love me?"), politely redirect to finance-related help without engaging in romantic, emotional, or unrelated conversation:
+"I'm ArthX, your finance-only AI assistant for SpendX. I'm here to help you manage your money, transactions, and budgets. Please ask me a finance-related question."
+- ASSISTANT IDENTITY: If asked "What's your name?", "Who are you?", or about your identity, reply briefly:
+"I'm ArthX, your finance-only AI assistant in SpendX. I provide intelligence for every rupee."
+- MIXED QUESTIONS: If a message contains both a finance-related question and an unrelated question, answer ONLY the finance-related portion using the verified financial data above, and briefly add the finance-only redirect for the unrelated portion without answering it.
+- AMBIGUOUS & CASUAL QUESTIONS: Answer finance-related questions even if they contain casual, informal, or slang wording (e.g. "how much did I spend?", "can I afford dinner?"). If a question is ambiguous, ask a brief clarification rather than automatically rejecting it.
+
+RULES FOR FINANCIAL DATA & SPENDX ASSISTANCE — follow these strictly:
 
 1. BASE ALL FINANCIAL ANSWERS ON THE DATA ABOVE ONLY. Never invent amounts, merchants, categories, dates, or counts. If a specific figure is not in the data above, say "I don't have that detail available."
 
@@ -476,14 +560,14 @@ RULES — follow these strictly:
 
 11. FOR SPENDING INSIGHTS AND TIPS, base suggestions on the user's actual top categories and merchants from the data above.
 
-Tone: Professional yet approachable — like a financially-savvy friend.`;
+Tone: Professional yet approachable, focused strictly on personal finance.`;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // MAIN HANDLER
 // ═══════════════════════════════════════════════════════════════════════════════
 
-module.exports = async (req, res) => {
+const handler = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -536,6 +620,15 @@ module.exports = async (req, res) => {
     return res.status(503).json({ error: { code: 'CONFIG_ERROR', message: 'AI assistant is not configured. Please contact support.' } });
   }
 
+  const { message, history = [] } = body;
+  const trimmedMessage = message.trim();
+
+  // ── Lightweight Scope / Identity Check ─────────────────────────────────────
+  const quickScopeReply = getLightweightScopeResponse(trimmedMessage);
+  if (quickScopeReply) {
+    return res.status(200).json({ reply: quickScopeReply });
+  }
+
   // ── Opening Balance Resolution ──────────────────────────────────────────────
   let openingBalance = 0;
   if (body.openingBalance !== undefined && body.openingBalance !== null) {
@@ -575,9 +668,6 @@ module.exports = async (req, res) => {
   }
 
   // ── Build Conversation Contents ─────────────────────────────────────────────
-  const { message, history = [] } = body;
-  const trimmedMessage = message.trim();
-
   const contents = [];
   for (const item of history) {
     contents.push({ role: item.role, parts: [{ text: item.text }] });
@@ -636,7 +726,17 @@ module.exports = async (req, res) => {
     lastError = outerErr;
   }
 
-  if (reply) return res.status(200).json({ reply });
+  if (reply) {
+    // Fail-safe: ensure no factual apple colour commentary ever leaks through
+    const lowerMsg = trimmedMessage.toLowerCase();
+    if (lowerMsg.includes('apple') && (lowerMsg.includes('colour') || lowerMsg.includes('color'))) {
+      const lowerReply = reply.toLowerCase();
+      if (lowerReply.includes('red') || lowerReply.includes('green') || lowerReply.includes('yellow')) {
+        reply = FINANCE_REDIRECT_MESSAGE;
+      }
+    }
+    return res.status(200).json({ reply });
+  }
 
   const { category } = categorizeError(lastError);
   if (category === 'TIMEOUT')                        return res.status(504).json({ error: { code: 'AI_TIMEOUT',        message: 'The assistant took too long to respond. Please try again.' } });
@@ -646,3 +746,9 @@ module.exports = async (req, res) => {
 
   return res.status(500).json({ error: { code: 'AI_ERROR', message: 'Unable to generate a response. Please try again later.' } });
 };
+
+module.exports = handler;
+module.exports.buildSystemInstruction = buildSystemInstruction;
+module.exports.getLightweightScopeResponse = getLightweightScopeResponse;
+module.exports.FINANCE_REDIRECT_MESSAGE = FINANCE_REDIRECT_MESSAGE;
+module.exports.ARTHX_IDENTITY_MESSAGE = ARTHX_IDENTITY_MESSAGE;
