@@ -80,9 +80,25 @@ module.exports = async (req, res) => {
     const recentTransactions = txns.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 10);
     const lastUpdated = monthlyData.length > 0 ? monthlyData[monthlyData.length - 1].label : 'No data';
 
+    const openingBalance = Number(user.user_metadata?.opening_balance ?? user.user_metadata?.openingBalance ?? 0) || 0;
+    const currentBalance = Math.round(((openingBalance || 0) + totalIncome - totalExpenses) * 100) / 100;
+    const transactionBalance = Math.round((totalIncome - totalExpenses) * 100) / 100;
+
     res.json({
-      totals: { expenses: Math.round(totalExpenses * 100) / 100, income: Math.round(totalIncome * 100) / 100, net: Math.round((totalIncome - totalExpenses) * 100) / 100, transactionCount: txns.length },
-      categoryBreakdown, monthlyData, topMerchants, recentTransactions, lastUpdated
+      totals: {
+        openingBalance,
+        expenses: Math.round(totalExpenses * 100) / 100,
+        income: Math.round(totalIncome * 100) / 100,
+        net: currentBalance,
+        currentBalance,
+        transactionBalance,
+        transactionCount: txns.length,
+      },
+      categoryBreakdown,
+      monthlyData,
+      topMerchants,
+      recentTransactions,
+      lastUpdated,
     });
   } catch (err) {
     console.error('Stats error:', err);

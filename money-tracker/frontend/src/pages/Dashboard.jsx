@@ -11,6 +11,7 @@ import MonthlyBarChart from '../components/Charts/MonthlyBarChart';
 import BorderGlow from '../components/BorderGlow';
 import GlareHover from '../components/GlareHover';
 import FeedbackModal from '../components/Feedback/FeedbackModal';
+import { supabase } from '../supabaseClient';
 
 const Dashboard = () => {
   const [transactions, setTransactions] = useState([]);
@@ -31,6 +32,14 @@ const Dashboard = () => {
     const saved = localStorage.getItem("openingBalance");
     if (saved !== null) {
       setOpeningBalance(Number(saved));
+    } else {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session?.user?.user_metadata?.opening_balance !== undefined) {
+          const val = Number(session.user.user_metadata.opening_balance) || 0;
+          setOpeningBalance(val);
+          localStorage.setItem("openingBalance", val);
+        }
+      }).catch(() => {});
     }
   }, []);
 
@@ -425,7 +434,10 @@ const Dashboard = () => {
                   transitionDuration={500}
                 >
                   <div 
-                    onClick={() => setShowModal(true)} 
+                    onClick={() => {
+                      setInputValue(openingBalance > 0 ? String(openingBalance) : "");
+                      setShowModal(true);
+                    }} 
                     className="p-5 h-full cursor-pointer hover:opacity-80 transition relative"
                   >
                     <StatCard 
@@ -573,6 +585,7 @@ const Dashboard = () => {
                     const val = Number(inputValue) || 0;
                     setOpeningBalance(val);
                     localStorage.setItem("openingBalance", val);
+                    supabase.auth.updateUser({ data: { opening_balance: val } }).catch(() => {});
                     setShowModal(false);
                   }}
                   className="px-4 py-2 bg-purple-600 rounded text-white"
@@ -584,6 +597,7 @@ const Dashboard = () => {
                 onClick={() => {
                   setOpeningBalance(0);
                   localStorage.removeItem("openingBalance");
+                  supabase.auth.updateUser({ data: { opening_balance: 0 } }).catch(() => {});
                   setInputValue("");
                   setShowModal(false);
                 }}

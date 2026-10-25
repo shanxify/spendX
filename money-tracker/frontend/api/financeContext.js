@@ -40,15 +40,21 @@ function formatINR(amount) {
 
 // ── Core aggregation (mirrors Dashboard.jsx calculations exactly) ─────────────
 
-function aggregateTransactions(txns) {
-  const nonFailed = txns.filter(t => t.status !== 'Failed');
+function aggregateTransactions(txns, openingBalance = 0) {
+  const nonFailed = (txns || []).filter(t => t.status !== 'Failed');
   const debits    = nonFailed.filter(t => t.type === 'debit');
   const credits   = nonFailed.filter(t => t.type === 'credit');
 
   // Totals
   const totalExpenses = Math.round(debits.reduce((s, t) => s + (parseFloat(t.amount) || 0), 0) * 100) / 100;
   const totalIncome   = Math.round(credits.reduce((s, t) => s + (parseFloat(t.amount) || 0), 0) * 100) / 100;
-  const transactionCount = txns.length; // ALL (matches dashboard's transactionCount)
+  const transactionCount = (txns || []).length; // ALL (matches dashboard's transactionCount)
+
+  // Balance calculations:
+  // Current Balance = Opening Balance + Total Income - Total Expenses (matches Dashboard.jsx stats.totals.net formula)
+  const currentBalance = Math.round(((openingBalance || 0) + totalIncome - totalExpenses) * 100) / 100;
+  // Net Transaction Balance = Total Income - Total Expenses (pure cashflow excluding opening balance)
+  const transactionBalance = Math.round((totalIncome - totalExpenses) * 100) / 100;
 
   // Average: expenses / ALL-transaction-count (matches Dashboard.jsx formula)
   const avgTransaction = transactionCount > 0
@@ -102,9 +108,13 @@ function aggregateTransactions(txns) {
   } : null;
 
   return {
+    openingBalance: Math.round((openingBalance || 0) * 100) / 100,
     totalExpenses,
     totalIncome,
-    net: Math.round((totalIncome - totalExpenses) * 100) / 100,
+    net: currentBalance, // Matches Dashboard.jsx stats.totals.net
+    currentBalance,
+    transactionBalance,
+    netTransactions: transactionBalance,
     transactionCount,
     avgTransaction,
     categories,
@@ -121,6 +131,10 @@ function aggregateTransactions(txns) {
  * Throws if the Supabase query fails.
  */
 async function fetchTransactions(supabase, userId, { from, to } = {}) {
+  if (!supabase || typeof supabase.from !== 'function') {
+    return [];
+  }
+
   let query = supabase
     .from('transactions')
     .select('type, amount, category, merchant, normalizedMerchant, date, status')
@@ -142,12 +156,42 @@ async function fetchTransactions(supabase, userId, { from, to } = {}) {
 /**
  * Builds a compact, structured financial context object for the authenticated user.
  *
- * @param {object} supabase  Authenticated Supabase client (already has user token set)
- * @param {string} userId    Verified user ID (from Supabase Auth, never client-supplied)
- * @returns {object}         { summary: string, raw: object, dateRanges: object }
- *                           or throws on DB error
+ * @param {object} supabase           Authenticated Supabase client (already has user token set)
+ * @param {string} userId             Verified user ID (from Supabase Auth, never client-supplied)
+ * @param {object|number} [optionsOrBalance=0] Options object { openingBalance } or numeric opening balance
+ * @returns {object}                  { summary: string, raw: object, dateRanges: object }
+ *                                    or throws on DB error
  */
-async function buildFinanceContext(supabase, userId) {
+async function buildFinanceContext(supabase, userId, optionsOrBalance = {}) {
+  let openingBalance = 0;
+  if (typeof optionsOrBalance === 'number') {
+    openingBalance = optionsOrBalance;
+  } else if (optionsOrBalance && typeof optionsOrBalance === 'object') {
+    if (optionsOrBalance.openingBalance !== undefined && optionsOrBalance.openingBalance !== null) {
+      openingBalance = Number(optionsOrBalance.openingBalance) || 0;
+    }
+  }
+
+  if (openingBalance === 0 && supabase && supabase.auth && typeof supabase.auth.getUser === 'function') {
+    try {
+      const { data } = await supabase.auth.getUser();
+      if (data?.user?.user_metadata?.opening_balance !== undefined) {
+        openingBalance = Number(data.user.user_metadata.opening_balance) || 0;
+      } else if (data?.user?.user_metadata?.openingBalance !== undefined) {
+        openingBalance = Number(data.user.user_metadata.openingBalance) || 0;
+      }
+    } catch {
+      // Ignore if auth lookup fails
+    }
+  }
+
+  if (openingBalance === 0 && process.env.OPENING_BALANCE !== undefined) {
+    const envVal = Number(process.env.OPENING_BALANCE);
+    if (!isNaN(envVal) && isFinite(envVal)) {
+      openingBalance = envVal;
+    }
+  }
+
   const currentRange  = currentMonthRange();
   const previousRange = previousMonthRange();
 
@@ -158,17 +202,20 @@ async function buildFinanceContext(supabase, userId) {
     fetchTransactions(supabase, userId, previousRange),
   ]);
 
-  const allTime  = aggregateTransactions(allTxns);
-  const current  = aggregateTransactions(currentTxns);
-  const previous = aggregateTransactions(previousTxns);
+  const allTime  = aggregateTransactions(allTxns, openingBalance);
+  const current  = aggregateTransactions(currentTxns, 0);
+  const previous = aggregateTransactions(previousTxns, 0);
 
-  const hasData = allTxns.length > 0;
+  const hasData = (allTxns && allTxns.length > 0);
 
   // ── Build compact text summary for Gemini system prompt ──────────────────
   const lines = [];
 
   if (!hasData) {
     lines.push('USER FINANCIAL DATA: No transactions found. The user has not uploaded any transaction data yet.');
+    if (allTime.openingBalance > 0) {
+      lines.push(`Opening Balance recorded: ${formatINR(allTime.openingBalance)}. Current Balance: ${formatINR(allTime.currentBalance)}.`);
+    }
     lines.push('Do not invent or assume any financial figures. Encourage the user to upload their transaction PDF first.');
   } else {
     const curLabel = monthLabel(currentRange.from);
@@ -178,9 +225,11 @@ async function buildFinanceContext(supabase, userId) {
     lines.push('');
     lines.push('-- ALL-TIME SUMMARY --');
     lines.push(`Total Transactions: ${allTime.transactionCount}`);
-    lines.push(`Total Expenses: ${formatINR(allTime.totalExpenses)}`);
+    lines.push(`Opening Balance: ${formatINR(allTime.openingBalance)}`);
     lines.push(`Total Income: ${formatINR(allTime.totalIncome)}`);
-    lines.push(`Net Balance (Income - Expenses): ${formatINR(allTime.net)}`);
+    lines.push(`Total Expenses: ${formatINR(allTime.totalExpenses)}`);
+    lines.push(`Current Balance / Net Balance (Opening Balance + Total Income - Total Expenses): ${formatINR(allTime.currentBalance)}`);
+    lines.push(`Net Transaction Balance (Total Income - Total Expenses, excluding opening balance): ${formatINR(allTime.transactionBalance)}`);
     lines.push(`Average Transaction Amount: ${formatINR(allTime.avgTransaction)}`);
 
     if (allTime.biggestExpense) {

@@ -51,6 +51,15 @@ export function useChatbot() {
         return;
       }
 
+      // Retrieve opening balance from authoritative local storage or session metadata
+      const savedOpening = localStorage.getItem('openingBalance');
+      let openingBalance = 0;
+      if (savedOpening !== null && !isNaN(Number(savedOpening))) {
+        openingBalance = Number(savedOpening);
+      } else if (session.user?.user_metadata?.opening_balance !== undefined) {
+        openingBalance = Number(session.user.user_metadata.opening_balance) || 0;
+      }
+
       // Build history for API (last N messages, excluding welcome message)
       const allMessages = [...messages.filter(m => m.id !== 'welcome'), userMsg];
       const historyForApi = allMessages.slice(-MAX_HISTORY_FOR_API).map(m => ({
@@ -71,7 +80,7 @@ export function useChatbot() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ message: trimmed, history }),
+        body: JSON.stringify({ message: trimmed, history, openingBalance }),
         signal: controller.signal,
       });
 

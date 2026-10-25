@@ -647,6 +647,125 @@ async function runTests() {
     setEnv(); // restore
   }
 
+  // ────────────────────────────────────────────────────────────────────────────
+  // SUITE 12: ArthX Net Balance & Opening Balance Verification
+  // ────────────────────────────────────────────────────────────────────────────
+  console.log('\n' + YELLOW + '◆ Suite 12: ArthX Net Balance & Opening Balance Verification' + RESET);
+  {
+    setEnv();
+    const SPENDX_TXNS = [
+      { id: 't1', type: 'credit', amount: 9302.00, category: 'Salary', merchant: 'Employer', status: 'Success', date: '2026-10-10' },
+      { id: 't2', type: 'debit', amount: 14278.15, category: 'Rent & Living', merchant: 'Landlord', status: 'Success', date: '2026-10-12' },
+    ];
+
+    const mockSupa = {
+      from: () => ({ select: () => ({ eq: () => makeQueryChain(SPENDX_TXNS, false) }) }),
+    };
+
+    const { buildFinanceContext } = require('./api/financeContext.js');
+
+    // 12a. Exact production figures: Opening Balance = ₹5,000, Income = ₹9,302, Expenses = ₹14,278.15
+    const ctx = await buildFinanceContext(mockSupa, 'user-a-uuid', { openingBalance: 5000 });
+
+    assert(ctx.raw.allTime.openingBalance === 5000, `Opening balance is ₹5,000.00 (got ${ctx.raw.allTime.openingBalance})`);
+    assert(ctx.raw.allTime.totalIncome === 9302, `Total income is ₹9,302.00 (got ${ctx.raw.allTime.totalIncome})`);
+    assert(ctx.raw.allTime.totalExpenses === 14278.15, `Total expenses is ₹14,278.15 (got ${ctx.raw.allTime.totalExpenses})`);
+    assert(ctx.raw.allTime.currentBalance === 23.85, `Current balance = 5000 + 9302 - 14278.15 = ₹23.85 (got ${ctx.raw.allTime.currentBalance})`);
+    assert(ctx.raw.allTime.net === 23.85, `Net balance equals current balance ₹23.85 (got ${ctx.raw.allTime.net})`);
+    assert(ctx.raw.allTime.transactionBalance === -4976.15, `Transaction balance without opening balance = -₹4,976.15 (got ${ctx.raw.allTime.transactionBalance})`);
+
+    // 12b. Verify summary text for Gemini system instruction contains both balances with clear distinctions
+    assert(ctx.summary.includes('Opening Balance: ₹5,000.00'), 'Summary contains Opening Balance ₹5,000.00');
+    assert(ctx.summary.includes('23.85'), 'Summary contains Current/Net Balance ₹23.85');
+    assert(ctx.summary.includes('-₹4,976.15') || ctx.summary.includes('4,976.15'), 'Summary contains Net Transaction Balance -₹4,976.15');
+
+    // 12c. Dynamic updates when opening balance changes
+    const ctx10k = await buildFinanceContext(mockSupa, 'user-a-uuid', { openingBalance: 10000 });
+    assert(ctx10k.raw.allTime.currentBalance === 5023.85, `Dynamically updates with ₹10,000 opening balance: ₹5,023.85 (got ${ctx10k.raw.allTime.currentBalance})`);
+    assert(ctx10k.raw.allTime.transactionBalance === -4976.15, 'Transaction balance remains unchanged at -₹4,976.15');
+
+    // 12d. Dynamic updates when opening balance is cleared (0)
+    const ctxZero = await buildFinanceContext(mockSupa, 'user-a-uuid', { openingBalance: 0 });
+    assert(ctxZero.raw.allTime.currentBalance === -4976.15, `Current balance with 0 opening balance is -₹4,976.15 (got ${ctxZero.raw.allTime.currentBalance})`);
+
+    // 12e. Dynamic updates when transactions change (+ ₹1,000 income)
+    const DYNAMIC_TXNS = [
+      ...SPENDX_TXNS,
+      { id: 't3', type: 'credit', amount: 1000.00, category: 'Bonus', merchant: 'Employer', status: 'Success', date: '2026-10-15' },
+    ];
+    const mockSupaDynamic = {
+      from: () => ({ select: () => ({ eq: () => makeQueryChain(DYNAMIC_TXNS, false) }) }),
+    };
+    const ctxDynamic = await buildFinanceContext(mockSupaDynamic, 'user-a-uuid', { openingBalance: 5000 });
+    assert(ctxDynamic.raw.allTime.currentBalance === 1023.85, `Dynamic income change updates current balance to ₹1,023.85 (got ${ctxDynamic.raw.allTime.currentBalance})`);
+
+    // 12f. Chat API receives openingBalance in request body and injects it into Gemini prompt
+    let capturedSystemPrompt = null;
+    googleGenAIMock = {
+      GoogleGenAI: class {
+        constructor() {}
+        get models() {
+          return {
+            generateContent: async ({ config }) => {
+              capturedSystemPrompt = config.systemInstruction;
+              return { text: 'Your current balance is ₹23.85 including your opening balance of ₹5,000.' };
+            },
+          };
+        }
+      },
+    };
+    supabaseMock = {
+      createClient: () => ({
+        auth: { getUser: async () => ({ data: { user: { id: 'user-a-uuid' } }, error: null }) },
+        from: () => ({ select: () => ({ eq: () => makeQueryChain(SPENDX_TXNS, false) }) }),
+      }),
+    };
+    clearHandlerCache();
+
+    const handler = require('./api/chat.js');
+    const req = mockReq({
+      method: 'POST',
+      headers: { authorization: 'Bearer user-a-token' },
+      body: { message: 'What is my current balance?', openingBalance: 5000 },
+    });
+    const res = mockRes();
+    await handler(req, res);
+
+    assert(res._result.statusCode === 200, 'Chat API responds 200 with openingBalance in body');
+    assert(capturedSystemPrompt && capturedSystemPrompt.includes('₹23.85'), 'Gemini prompt includes Current Balance ₹23.85');
+    assert(capturedSystemPrompt && capturedSystemPrompt.includes('₹5,000.00'), 'Gemini prompt includes Opening Balance ₹5,000.00');
+
+    // 12g. Fallback to user_metadata when openingBalance is in user profile
+    capturedSystemPrompt = null;
+    supabaseMock = {
+      createClient: () => ({
+        auth: { getUser: async () => ({ data: { user: { id: 'user-a-uuid', user_metadata: { opening_balance: 5000 } } }, error: null }) },
+        from: () => ({ select: () => ({ eq: () => makeQueryChain(SPENDX_TXNS, false) }) }),
+      }),
+    };
+    clearHandlerCache();
+    const handlerMeta = require('./api/chat.js');
+    const reqMeta = mockReq({
+      method: 'POST',
+      headers: { authorization: 'Bearer user-a-token' },
+      body: { message: 'What is my net balance?' },
+    });
+    const resMeta = mockRes();
+    await handlerMeta(reqMeta, resMeta);
+    assert(resMeta._result.statusCode === 200, 'Chat API responds 200 reading user_metadata');
+    assert(capturedSystemPrompt && capturedSystemPrompt.includes('₹23.85'), 'Gemini prompt includes Current Balance ₹23.85 from user_metadata');
+
+    // 12h. Validation rejects invalid openingBalance values (NaN/non-numeric string)
+    const reqInvalid = mockReq({
+      method: 'POST',
+      headers: { authorization: 'Bearer user-a-token' },
+      body: { message: 'What is my net balance?', openingBalance: 'invalid-number' },
+    });
+    const resInvalid = mockRes();
+    await handler(reqInvalid, resInvalid);
+    assert(resInvalid._result.statusCode === 400, 'Invalid openingBalance string returns 400');
+  }
+
   // ── Restore module loader ──────────────────────────────────────────────────
   Module._load = originalLoad;
   supabaseMock    = null;
